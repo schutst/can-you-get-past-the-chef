@@ -50,6 +50,7 @@ const BANNER_MS       = 900;  // how long the "STAR POWER!" banner lingers
 const BOB_PIXELS       = 2;   // pixels the pizza & chef bob up/down at rest
 const CHEF_SCARY_RANGE = 3;   // tiles; chef shows an angry face within this range
 const SQUASH_MS        = 260; // how long the pizza squashes when losing a life
+const LEVEL_INTRO_MS   = 1500;// how long the "Level N: Name" card stays on screen
 
 // Maze colors — change these to re-theme the restaurant
 const WALL_COLOR       = "#cc0000";  // red walls
@@ -76,64 +77,103 @@ const BACKGROUND_COLOR = "#000000";  // black background
 //    Add your own level by appending another array of strings to LEVELS.
 // --------------------------------------------------------------------------
 
+// Each level now has a name + a grid + a visual THEME so levels can look
+// distinct. A theme is just a bag of colours plus a "floorPattern" string:
+//   "solid"   — fill the floor with bgColor (the classic look)
+//   "checker" — alternate two light-and-dark shades square by square
+//   "neon"    — very dark floor with glowing outlines on each open tile
 const LEVELS = [
-  // ---------- LEVEL 1 — the warm-up restaurant ----------
-  [
-    "111111111111111",
-    "1@0000000000001",
-    "101010101010101",
-    "100000P0000C001",
-    "101010101010101",
-    "100000S00000001",
-    "101010101010101",
-    "10O00000X000001",
-    "101010101010101",
-    "10000000000X0E1",
-    "111111111111111",
-  ],
+  // ---------- LEVEL 1 — Classic Pizzeria ----------
+  {
+    name: "Classic Pizzeria",
+    theme: {
+      wallColor:     "#cc0000",
+      wallHighlight: "#ff4444",
+      bgColor:       "#000000",
+      floorPattern:  "solid",
+    },
+    grid: [
+      "111111111111111",
+      "1@0000000000001",
+      "101010101010101",
+      "100000P0000C001",
+      "101010101010101",
+      "100000S00000001",
+      "101010101010101",
+      "10O00000X000001",
+      "101010101010101",
+      "10000000000X0E1",
+      "111111111111111",
+    ],
+  },
 
-  // ---------- LEVEL 2 — tighter lanes, more spikes ----------
-  [
-    "111111111111111",
-    "1@000X00000O001",
-    "101110111011101",
-    "10000000S000001",
-    "101010101010101",
-    "10P0X000X000X01",
-    "101010101010101",
-    "10000000000C001",
-    "101110111011101",
-    "10X0000E00000X1",
-    "111111111111111",
-  ],
+  // ---------- LEVEL 2 — Italian Bistro ----------
+  {
+    name: "Italian Bistro",
+    theme: {
+      wallColor:       "#2f7a3a",    // trattoria green
+      wallHighlight:   "#5bb069",
+      bgColor:         "#f5efe0",    // warm cream (used as the "light" checker)
+      floorPatternAlt: "#e4d9bf",    // the "dark" checker
+      floorPattern:    "checker",
+    },
+    grid: [
+      "111111111111111",
+      "1@000X00000O001",
+      "101110111011101",
+      "10000000S000001",
+      "101010101010101",
+      "10P0X000X000X01",
+      "101010101010101",
+      "10000000000C001",
+      "101110111011101",
+      "10X0000E00000X1",
+      "111111111111111",
+    ],
+  },
 
-  // ---------- LEVEL 3 — the boss kitchen ----------
-  [
-    "111111111111111",
-    "1@0X0000000X001",
-    "111010111010111",
-    "100P00000000O01",
-    "101010111010101",
-    "100X00S00X00001",
-    "101010111010101",
-    "10000X000X0C001",
-    "111010111010111",
-    "10X0000E000X001",
-    "111111111111111",
-  ],
+  // ---------- LEVEL 3 — Midnight Kitchen ----------
+  {
+    name: "Midnight Kitchen",
+    theme: {
+      wallColor:     "#2a0a4a",
+      wallHighlight: "#6b28c2",
+      bgColor:       "#0a0418",      // nearly-black
+      floorOutline:  "#22e8ff",      // glowing cyan edge on floor tiles
+      floorPattern:  "neon",
+    },
+    grid: [
+      "111111111111111",
+      "1@0X0000000X001",
+      "111010111010111",
+      "100P00000000O01",
+      "101010111010101",
+      "100X00S00X00001",
+      "101010111010101",
+      "10000X000X0C001",
+      "111010111010111",
+      "10X0000E000X001",
+      "111111111111111",
+    ],
+  },
 ];
 
 // ROWS and COLS are locked to level 1's size. For simplicity all levels in
 // LEVELS must be the same width and height — the canvas is sized once.
-const ROWS = LEVELS[0].length;
-const COLS = LEVELS[0][0].length;
+const ROWS = LEVELS[0].grid.length;
+const COLS = LEVELS[0].grid[0].length;
 
-// `MAZE` is the level we're currently playing. startGame() swaps it when the
-// player advances. Keeping the name "MAZE" means the rest of the code
-// (collision checks, drawing, etc.) didn't need to change — it still reads
-// from a single level's grid.
-let MAZE = LEVELS[0];
+// `MAZE` is the grid of the level we're currently playing. startGame() swaps
+// it when the player advances. Keeping the name "MAZE" means the rest of the
+// code (collision checks, drawing, etc.) didn't need to change — it still
+// reads from a single 2D grid of characters.
+let MAZE = LEVELS[0].grid;
 let currentLevel = 0;
+
+// Helper for the code that wants the active level's visual theme.
+function currentTheme() {
+  return LEVELS[currentLevel].theme || {};
+}
 
 
 // --------------------------------------------------------------------------
@@ -162,6 +202,7 @@ let hitFlashEndsAt;     // timestamp until which we paint a red full-canvas flas
 let bannerText;         // short string shown across the canvas, or ""
 let bannerEndsAt;       // when the banner disappears
 let squashEndsAt;       // timestamp until which the pizza is squashed flat
+let levelIntroUntil;    // timestamp at which the "Level N: Name" card fades out
 
 
 // --------------------------------------------------------------------------
@@ -244,7 +285,7 @@ function chefSmartnessFor(levelIdx) {
 function startGame(opts = {}) {
   const keepScore = !!opts.keepScore;
   currentLevel = (typeof opts.levelIndex === "number") ? opts.levelIndex : 0;
-  MAZE = LEVELS[currentLevel];
+  MAZE = LEVELS[currentLevel].grid;
 
   // Reset per-game stuff (or keep it if we're just advancing a level)
   // facingDx / facingDy is the direction the pizza last tried to move —
@@ -271,6 +312,7 @@ function startGame(opts = {}) {
   bannerText         = "";
   bannerEndsAt       = 0;
   squashEndsAt       = 0;
+  levelIntroUntil    = performance.now() + LEVEL_INTRO_MS;
 
   // Walk through the maze characters and place everything in the world
   for (let row = 0; row < ROWS; row++) {
@@ -687,18 +729,55 @@ function draw() {
     shakeFramesLeft -= 1;
   }
 
-  // 1. Paint the background
-  ctx.fillStyle = BACKGROUND_COLOR;
+  // Pull colours from the active level's theme, falling back to the
+  // original global constants if a theme doesn't specify one. That means
+  // WALL_COLOR / BACKGROUND_COLOR / WALL_HIGHLIGHT still work as global
+  // "no theme specified" defaults.
+  const theme       = currentTheme();
+  const bgColor     = theme.bgColor       || BACKGROUND_COLOR;
+  const wallColor   = theme.wallColor     || WALL_COLOR;
+  const wallHigh    = theme.wallHighlight || WALL_HIGHLIGHT;
+  const floorAlt    = theme.floorPatternAlt;
+  const floorOutline = theme.floorOutline;
+
+  // 1. Paint the background / floor. The pattern depends on the theme.
+  ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (theme.floorPattern === "checker" && floorAlt) {
+    // Alternate squares of bgColor and floorAlt on open-floor tiles only.
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        if (MAZE[row][col] !== "1" && ((col + row) % 2 === 1)) {
+          ctx.fillStyle = floorAlt;
+          ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+      }
+    }
+  } else if (theme.floorPattern === "neon" && floorOutline) {
+    // A glowing cyan outline around each open floor tile.
+    ctx.strokeStyle = floorOutline;
+    ctx.lineWidth   = 1;
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        if (MAZE[row][col] !== "1") {
+          ctx.strokeRect(
+            col * TILE_SIZE + 0.5, row * TILE_SIZE + 0.5,
+            TILE_SIZE - 1,         TILE_SIZE - 1
+          );
+        }
+      }
+    }
+  }
 
   // 2. Paint the walls
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       if (MAZE[row][col] === "1") {
-        ctx.fillStyle = WALL_COLOR;
+        ctx.fillStyle = wallColor;
         ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         // little highlight stripe so walls feel pixel-arty
-        ctx.fillStyle = WALL_HIGHLIGHT;
+        ctx.fillStyle = wallHigh;
         ctx.fillRect(col * TILE_SIZE + 2, row * TILE_SIZE + 2, TILE_SIZE - 4, 4);
       }
     }
@@ -779,8 +858,60 @@ function draw() {
   // 8. Big centred banner ("STAR POWER!") if one is active.
   drawBanner();
 
+  // 9. "Level N: Name" intro card over the whole canvas.
+  drawLevelIntro();
+
   // Restore the canvas so the next frame starts with no translate
   ctx.restore();
+}
+
+// Translucent card that fades in, holds, and fades out over LEVEL_INTRO_MS.
+function drawLevelIntro() {
+  const now = performance.now();
+  if (now >= levelIntroUntil) return;
+
+  const remaining = levelIntroUntil - now;
+  const age       = LEVEL_INTRO_MS - remaining;
+  // Fade in over the first 250ms, fade out over the last 350ms, hold flat between.
+  let alpha = 1;
+  if (age < 250)          alpha = age / 250;
+  else if (remaining < 350) alpha = remaining / 350;
+
+  ctx.globalAlpha = alpha;
+  // Dim the scene slightly
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "middle";
+
+  // "Level N" subheading
+  ctx.font        = "bold 22px 'Comic Sans MS', sans-serif";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth   = 4;
+  ctx.strokeText(`Level ${currentLevel + 1}`, cx, cy - 28);
+  ctx.fillStyle   = "#ffffff";
+  ctx.fillText(  `Level ${currentLevel + 1}`, cx, cy - 28);
+
+  // The name itself — big, themed colour
+  const name = (LEVELS[currentLevel] && LEVELS[currentLevel].name) || "";
+  ctx.font        = "bold 36px 'Comic Sans MS', sans-serif";
+  ctx.lineWidth   = 6;
+  ctx.strokeText(name, cx, cy + 8);
+  ctx.fillStyle   = currentTheme().wallHighlight || "#ffcc00";
+  ctx.fillText(  name, cx, cy + 8);
+
+  // Hint line
+  ctx.font        = "14px 'Comic Sans MS', sans-serif";
+  ctx.lineWidth   = 3;
+  ctx.strokeText("press any key to skip", cx, cy + 46);
+  ctx.fillStyle   = "#cccccc";
+  ctx.fillText(  "press any key to skip", cx, cy + 46);
+
+  ctx.globalAlpha = 1;
 }
 
 
@@ -789,8 +920,10 @@ function draw() {
 // --------------------------------------------------------------------------
 
 function gameLoop() {
-  if (!gameOver) {
-    const now = performance.now();
+  const now = performance.now();
+  // Intro cards pause the world so the player can read the name.
+  const introActive = now < levelIntroUntil;
+  if (!gameOver && !introActive) {
     tryMovePlayer(now);
     moveChef(now);
     updateHUD();
@@ -805,6 +938,9 @@ function gameLoop() {
 // --------------------------------------------------------------------------
 
 document.addEventListener("keydown", (e) => {
+  // Pressing any key dismisses the level-intro card early.
+  if (performance.now() < levelIntroUntil) levelIntroUntil = 0;
+
   // Normalize letter keys to lowercase (so W and w both work)
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   keysHeld[k] = true;

@@ -117,6 +117,7 @@ const BANNER_MS      = 900;  // how long the "STAR POWER!" banner stays
 const BOB_PIXELS     = 2;    // idle-bob height for pizza & chef
 const CHEF_SCARY_RANGE = 3;  // tiles — chef shows 😠 within this range
 const SQUASH_MS      = 260;  // pizza squash animation length on a hit
+const LEVEL_INTRO_MS = 1500; // how long the "Level N: Name" card shows
 ```
 Set any of these to `0` to disable that effect. Crank them up for
 extra chaos.
@@ -130,22 +131,34 @@ const BACKGROUND_COLOR = "#000000";  // black
 Try `"#00aaff"` for blue walls, or `"#001133"` for a dark blue background. Google "hex color picker" to find any color you want.
 
 ### 6. Add more toppings (or move things around!)
-Find the `LEVELS` section in `game.js`. It's an array of mazes:
+Find the `LEVELS` section in `game.js`. It's an array of level objects:
 
 ```js
 const LEVELS = [
-  // ---------- LEVEL 1 ----------
-  [
-    "111111111111111",
-    "1@0000000000001",
-    ...
-  ],
-  // ---------- LEVEL 2 ----------
-  [ ... ],
-  // ---------- LEVEL 3 ----------
-  [ ... ],
+  {
+    name: "Classic Pizzeria",
+    theme: {
+      wallColor:     "#cc0000",
+      wallHighlight: "#ff4444",
+      bgColor:       "#000000",
+      floorPattern:  "solid",
+    },
+    grid: [
+      "111111111111111",
+      "1@0000000000001",
+      ...
+    ],
+  },
+  ...
 ];
 ```
+
+- `name` is shown in the "Level N: …" intro card.
+- `theme.floorPattern` is one of:
+  - `"solid"` — plain coloured floor (like the classic pizzeria)
+  - `"checker"` — alternating squares; needs `theme.floorPatternAlt` too
+  - `"neon"` — dark floor with glowing outlines; needs `theme.floorOutline`
+- `grid` is the maze, same rules as before.
 
 Each character in a level is one square of the maze:
 
