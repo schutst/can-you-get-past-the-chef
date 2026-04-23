@@ -11,8 +11,9 @@
     <!-- Game title -->
     <h1>🍕 Can You Get Past The Chef! 👨‍🍳</h1>
 
-    <!-- HUD: score, best score, lives, and the star power timer (hidden unless active) -->
+    <!-- HUD: level, score, best, lives, and the star power timer (hidden unless active) -->
     <div class="hud">
+      <div>Level: <span id="level">1</span></div>
       <div>Score: <span id="score">0</span></div>
       <div>Best: <span id="best">0</span></div>
       <div>Lives: <span id="lives">❤️❤️❤️</span></div>
@@ -28,11 +29,21 @@
       <button id="restartBtn">🔄 Restart</button>
     </div>
 
-    <!-- WIN screen: shown when all toppings are collected -->
+    <!-- LEVEL CLEARED screen: shown between levels (no lives reset) -->
+    <div id="level-clear-screen" class="overlay hidden">
+      <div class="message-box">
+        <h2>✅ Level Cleared!</h2>
+        <p>Score so far: <span id="level-clear-score">0</span></p>
+        <p>Next up: Level <span id="next-level-number">2</span></p>
+        <button id="nextLevelBtn">Next Level →</button>
+      </div>
+    </div>
+
+    <!-- FINAL WIN screen: shown after beating the LAST level -->
     <div id="win-screen" class="overlay hidden">
       <div class="message-box">
-        <h2>🎉 You Win! 🎉</h2>
-        <p>You got past the chef!</p>
+        <h2>🎉 You beat the whole restaurant! 🎉</h2>
+        <p>Every chef, every spike, every level.</p>
         <p>Final Score: <span id="final-score-win">0</span></p>
         <p>Best Score: <span id="best-score-win">0</span></p>
         <button id="playAgainWinBtn">Play Again</button>

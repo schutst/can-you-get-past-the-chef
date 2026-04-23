@@ -14,10 +14,15 @@
 
 const TILE_SIZE = 40;           // how big each maze square is, in pixels
 const PLAYER_MOVE_DELAY = 90;   // how fast the pizza can move (smaller = faster)
-const CHEF_MOVE_DELAY   = 400;  // how fast the chef moves  (smaller = faster)
-const CHEF_SMARTNESS    = 0.75; // 0 = fully random, 1 = always chases the pizza.
+const CHEF_MOVE_DELAY   = 400;  // starting chef speed on level 1 (smaller = faster)
+const CHEF_SMARTNESS    = 0.75; // starting chef smartness on level 1.
+                                // 0 = fully random, 1 = always chases the pizza.
                                 // 0.75 means he chases 75% of the time and
                                 // picks a random legal direction the other 25%.
+// Each new level makes the chef a little faster and a little smarter.
+// Level 2's chef speed = CHEF_MOVE_DELAY - CHEF_SPEEDUP_PER_LEVEL, and so on.
+const CHEF_SPEEDUP_PER_LEVEL    = 80;    // ms shaved off CHEF_MOVE_DELAY per level
+const CHEF_SMARTNESS_PER_LEVEL  = 0.1;   // extra smartness per level (capped at 1.0)
 const STARTING_LIVES    = 3;    // how many lives you start with
 const STAR_POWER_SECONDS = 5;   // how long star mode lasts
 const POINTS_PER_TOPPING = 10;  // score for each topping
@@ -42,7 +47,7 @@ const BACKGROUND_COLOR = "#000000";  // black background
 
 
 // --------------------------------------------------------------------------
-// 2. THE MAZE — one string per row. Each character is a square.
+// 2. THE LEVELS — one string per row for each level. Each character is a square.
 //
 //    Legend:
 //      1 = wall        X = spike (danger!)
@@ -51,26 +56,73 @@ const BACKGROUND_COLOR = "#000000";  // black background
 //      O = olive       E = chef (enemy) starting spot
 //      C = cheese
 //
-//    Rule: every row must have the same length, and the border must be all 1s
-//    so the walls close in.
+//    Rules:
+//      - Every row in a level must have the same length.
+//      - Every level's border must be all 1s so the walls close in.
+//      - Each level should have at least one P, O, and C (the three toppings)
+//        so "collect all toppings" works.
+//
+//    Add your own level by appending another array of strings to LEVELS.
 // --------------------------------------------------------------------------
 
-const MAZE = [
-  "111111111111111",
-  "1@0000000000001",
-  "101010101010101",
-  "100000P0000C001",
-  "101010101010101",
-  "100000S00000001",
-  "101010101010101",
-  "10O00000X000001",
-  "101010101010101",
-  "10000000000X0E1",
-  "111111111111111",
+const LEVELS = [
+  // ---------- LEVEL 1 — the warm-up restaurant ----------
+  [
+    "111111111111111",
+    "1@0000000000001",
+    "101010101010101",
+    "100000P0000C001",
+    "101010101010101",
+    "100000S00000001",
+    "101010101010101",
+    "10O00000X000001",
+    "101010101010101",
+    "10000000000X0E1",
+    "111111111111111",
+  ],
+
+  // ---------- LEVEL 2 — tighter lanes, more spikes ----------
+  [
+    "111111111111111",
+    "1@000X00000O001",
+    "101110111011101",
+    "10000000S000001",
+    "101010101010101",
+    "10P0X000X000X01",
+    "101010101010101",
+    "10000000000C001",
+    "101110111011101",
+    "10X0000E00000X1",
+    "111111111111111",
+  ],
+
+  // ---------- LEVEL 3 — the boss kitchen ----------
+  [
+    "111111111111111",
+    "1@0X0000000X001",
+    "111010111010111",
+    "100P00000000O01",
+    "101010111010101",
+    "100X00S00X00001",
+    "101010111010101",
+    "10000X000X0C001",
+    "111010111010111",
+    "10X0000E000X001",
+    "111111111111111",
+  ],
 ];
 
-const ROWS = MAZE.length;
-const COLS = MAZE[0].length;
+// ROWS and COLS are locked to level 1's size. For simplicity all levels in
+// LEVELS must be the same width and height — the canvas is sized once.
+const ROWS = LEVELS[0].length;
+const COLS = LEVELS[0][0].length;
+
+// `MAZE` is the level we're currently playing. startGame() swaps it when the
+// player advances. Keeping the name "MAZE" means the rest of the code
+// (collision checks, drawing, etc.) didn't need to change — it still reads
+// from a single level's grid.
+let MAZE = LEVELS[0];
+let currentLevel = 0;
 
 
 // --------------------------------------------------------------------------
@@ -104,13 +156,15 @@ canvas.width  = COLS * TILE_SIZE;
 canvas.height = ROWS * TILE_SIZE;
 const ctx = canvas.getContext("2d");
 
-const scoreEl     = document.getElementById("score");
-const bestEl      = document.getElementById("best");
-const livesEl     = document.getElementById("lives");
-const starTimerEl = document.getElementById("star-timer");
-const starSecsEl  = document.getElementById("star-seconds");
-const winScreen   = document.getElementById("win-screen");
-const loseScreen  = document.getElementById("lose-screen");
+const scoreEl          = document.getElementById("score");
+const bestEl           = document.getElementById("best");
+const levelEl          = document.getElementById("level");
+const livesEl          = document.getElementById("lives");
+const starTimerEl      = document.getElementById("star-timer");
+const starSecsEl       = document.getElementById("star-seconds");
+const winScreen        = document.getElementById("win-screen");        // FINAL win (after last level)
+const loseScreen       = document.getElementById("lose-screen");
+const levelClearScreen = document.getElementById("level-clear-screen"); // between levels
 
 
 // --------------------------------------------------------------------------
@@ -155,15 +209,36 @@ let bestScore = loadBestScore();
 // 5. START / RESTART — set up a fresh game by reading the MAZE strings.
 // --------------------------------------------------------------------------
 
-function startGame() {
-  // Reset everything back to starting values
+// How fast the chef moves on a given level (levels past 1 speed him up).
+// Clamped at 100ms so he can never become completely frantic.
+function chefDelayFor(levelIdx) {
+  return Math.max(100, CHEF_MOVE_DELAY - levelIdx * CHEF_SPEEDUP_PER_LEVEL);
+}
+
+// How smart the chef is on a given level (levels past 1 make him smarter).
+// Clamped at 1.0 so the math never goes beyond "always chase".
+function chefSmartnessFor(levelIdx) {
+  return Math.min(1.0, CHEF_SMARTNESS + levelIdx * CHEF_SMARTNESS_PER_LEVEL);
+}
+
+// startGame(opts):
+//   opts.keepScore  — true if continuing to the next level (keep score & lives)
+//   opts.levelIndex — which level to load (defaults to 0 for a brand new run)
+function startGame(opts = {}) {
+  const keepScore = !!opts.keepScore;
+  currentLevel = (typeof opts.levelIndex === "number") ? opts.levelIndex : 0;
+  MAZE = LEVELS[currentLevel];
+
+  // Reset per-game stuff (or keep it if we're just advancing a level)
   player   = { col: 0, row: 0 };
   chef     = { col: 0, row: 0 };
   toppings = [];
   spikes   = [];
   star     = null;
-  score    = 0;
-  lives    = STARTING_LIVES;
+  if (!keepScore) {
+    score = 0;
+    lives = STARTING_LIVES;
+  }
   starPowerEndsAt    = 0;
   gameOver           = false;
   lastPlayerMoveTime = 0;
@@ -192,10 +267,12 @@ function startGame() {
   chef.startCol   = chef.col;
   chef.startRow   = chef.row;
 
-  // Hide win/lose screens and refresh the HUD
+  // Hide win/lose/between-level screens and refresh the HUD
   winScreen.classList.add("hidden");
   loseScreen.classList.add("hidden");
-  bestEl.textContent = bestScore;    // keep the "Best" number in sync
+  levelClearScreen.classList.add("hidden");
+  bestEl.textContent  = bestScore;             // keep the "Best" number in sync
+  levelEl.textContent = (currentLevel + 1);    // "Level: 2" etc.
   updateHUD();
 }
 
@@ -285,13 +362,13 @@ function manhattan(aCol, aRow, bCol, bRow) {
 }
 
 function moveChef(now) {
-  if (now - lastChefMoveTime < CHEF_MOVE_DELAY) return;
+  if (now - lastChefMoveTime < chefDelayFor(currentLevel)) return;
 
   const legal = legalDirectionsFrom(chef.col, chef.row);
   if (legal.length === 0) { lastChefMoveTime = now; return; } // boxed in
 
   // Roll the dice: do we chase this turn, or wander?
-  const chase = Math.random() < CHEF_SMARTNESS;
+  const chase = Math.random() < chefSmartnessFor(currentLevel);
 
   let chosen;
   if (chase) {
@@ -372,15 +449,25 @@ function checkPlayerCollisions() {
     }
   }
 
-  // Win condition: no toppings left on the map
+  // Win condition: no toppings left on the level
   if (toppings.length === 0) {
     score += WIN_BONUS;
-    gameOver = true;
-    maybeUpdateBestScore();
-    document.getElementById("final-score-win").textContent = score;
-    document.getElementById("best-score-win").textContent  = bestScore;
-    winScreen.classList.remove("hidden");
     playFanfare();  // victory trumpet!
+    gameOver = true;
+
+    const nextLevel = currentLevel + 1;
+    if (nextLevel < LEVELS.length) {
+      // Between-levels: show a "Level Cleared!" screen. Score and lives carry over.
+      document.getElementById("level-clear-score").textContent = score;
+      document.getElementById("next-level-number").textContent = nextLevel + 1;
+      levelClearScreen.classList.remove("hidden");
+    } else {
+      // That was the last level — grand finale.
+      maybeUpdateBestScore();
+      document.getElementById("final-score-win").textContent = score;
+      document.getElementById("best-score-win").textContent  = bestScore;
+      winScreen.classList.remove("hidden");
+    }
   }
 
   updateHUD();
@@ -562,9 +649,15 @@ document.addEventListener("keyup", (e) => {
 // 14. RESTART BUTTONS — wire every "play again" button to startGame().
 // --------------------------------------------------------------------------
 
-document.getElementById("restartBtn").addEventListener("click", startGame);
-document.getElementById("playAgainWinBtn").addEventListener("click", startGame);
-document.getElementById("playAgainLoseBtn").addEventListener("click", startGame);
+// "Restart" and "Play Again" both reset everything back to level 1.
+document.getElementById("restartBtn").addEventListener("click",      () => startGame());
+document.getElementById("playAgainWinBtn").addEventListener("click", () => startGame());
+document.getElementById("playAgainLoseBtn").addEventListener("click",() => startGame());
+
+// "Next Level" keeps the current score & lives and loads the next maze.
+document.getElementById("nextLevelBtn").addEventListener("click", () => {
+  startGame({ keepScore: true, levelIndex: currentLevel + 1 });
+});
 
 // "Reset Best Score" wipes the remembered best score back to 0.
 function resetBestScore() {

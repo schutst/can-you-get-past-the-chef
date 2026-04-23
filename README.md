@@ -13,9 +13,10 @@ Built with plain **HTML + CSS + JavaScript**. No frameworks, no build step, no s
 3. Avoid the 👨‍🍳 chef — if he catches you, you lose a life.
 4. Avoid ⚠️ spikes — they also cost a life.
 5. Grab the ⭐ star for 5 seconds of **star power** — during star mode, touching the chef sends him back to the kitchen.
-6. Collect all toppings to **win**.
-7. You start with 3 lives. If all lives are lost, the chef wins.
-8. The game remembers your **best score** ever, even after you close the tab. Beat it!
+6. Collect all toppings to **clear a level**.
+7. There are **three levels** — the chef gets faster and smarter each one.
+8. You start with 3 lives. If all lives are lost, the chef wins.
+9. The game remembers your **best score** ever, even after you close the tab. Beat it!
 
 ### Controls
 
@@ -122,19 +123,24 @@ const BACKGROUND_COLOR = "#000000";  // black
 Try `"#00aaff"` for blue walls, or `"#001133"` for a dark blue background. Google "hex color picker" to find any color you want.
 
 ### 6. Add more toppings (or move things around!)
-Find the `MAZE` section in `game.js`. It looks like this:
+Find the `LEVELS` section in `game.js`. It's an array of mazes:
 
 ```js
-const MAZE = [
-  "111111111111111",
-  "1@0000000000001",
-  "101010101010101",
-  "100000P0000C001",
-  ...
+const LEVELS = [
+  // ---------- LEVEL 1 ----------
+  [
+    "111111111111111",
+    "1@0000000000001",
+    ...
+  ],
+  // ---------- LEVEL 2 ----------
+  [ ... ],
+  // ---------- LEVEL 3 ----------
+  [ ... ],
 ];
 ```
 
-Each character is one square of the maze:
+Each character in a level is one square of the maze:
 
 | Character | Means |
 |-----------|-------|
@@ -150,9 +156,20 @@ Each character is one square of the maze:
 
 Want more pepperoni? Change any `0` to a `P`. Want to move the chef? Change his `E` to a new spot (and turn the old one back into `0`).
 
-⚠️ Two rules to remember:
-- **Every row must be the same length** (15 characters in the default maze).
+⚠️ Rules to remember:
+- **Every row must be the same length** (15 characters in the default levels).
+- **Every level must be the same size as the others** (11 × 15 in the default game).
 - **The outside edge must all be `1`s** or the walls won't close.
+- **Each level needs at least one `P`, `O`, and `C`** (the three toppings).
+
+### 7. Tune how the chef gets harder each level
+```js
+const CHEF_SPEEDUP_PER_LEVEL   = 80;   // ms shaved off CHEF_MOVE_DELAY per level
+const CHEF_SMARTNESS_PER_LEVEL = 0.1;  // extra CHEF_SMARTNESS per level (cap 1.0)
+```
+Each new level, the chef moves a little faster and chases a little more
+often. Crank these numbers up for brutal difficulty spikes, or down to
+zero if you want every level to play the same.
 
 ---
 
@@ -161,16 +178,17 @@ Want more pepperoni? Change any `0` to a `P`. Want to move the chef? Change his 
 `game.js` is split into labeled sections, in the order they run:
 
 1. **SETTINGS** — all the numbers and colors you can change
-2. **THE MAZE** — the grid, drawn as strings
+2. **THE LEVELS** — the three mazes, drawn as strings
 3. **GAME STATE** — things that change while playing (score, positions)
 4. **SET UP THE CANVAS** — get ready to draw
-5. **START / RESTART** — what happens when a new game begins
+4b. **HIGH SCORE** — read and write the best-ever score with `localStorage`
+5. **START / RESTART** — what happens when a new game (or new level) begins
 6. **HELPERS** — tiny utility functions
 7. **PLAYER MOVEMENT** — reading the keyboard and moving the pizza
-8. **CHEF MOVEMENT** — picking a random direction each turn
+8. **CHEF MOVEMENT** — greedy chase, mixed with a little randomness
 9. **COLLISIONS** — what happens when two things touch
 10. **HUD UPDATE** — refresh the score / lives / star timer
-11. **DRAWING** — paint the scene
+11. **DRAWING** — paint the scene (with screen-shake + tile flash + pulsing pizza)
 12. **MAIN LOOP** — runs forever
 13. **KEYBOARD** — remember which keys are held
 14. **RESTART BUTTONS** — wire up the buttons
