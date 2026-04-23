@@ -1012,7 +1012,9 @@ function draw() {
   if (chefFrozen) {
     const remaining = (chefFrozenUntil - now) / 1000;
     const chefC = tileCenter(chef.col, chef.row);
-    drawEmoji("❄️", chef.col, chef.row - 0.55, TILE_SIZE * 0.5);
+    // Normally the snowflake hovers above the chef; if he's near the top of the canvas, flip it below so it doesn't clip off-screen.
+    const snowRowOffset = chef.row <= 1 ? 0.55 : -0.55;
+    drawEmoji("❄️", chef.col, chef.row + snowRowOffset, TILE_SIZE * 0.5);
     ctx.font         = "bold 14px 'Comic Sans MS', sans-serif";
     ctx.textAlign    = "center";
     ctx.textBaseline = "middle";
