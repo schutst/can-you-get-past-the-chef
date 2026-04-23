@@ -17,6 +17,7 @@ Built with plain **HTML + CSS + JavaScript**. No frameworks, no build step, no s
 7. There are **three levels** — the chef gets faster and smarter each one.
 8. You start with 3 lives. If all lives are lost, the chef wins.
 9. The game remembers your **best score** ever, even after you close the tab. Beat it!
+10. Grab toppings in quick succession to build a **combo** — each one multiplies your score up to **x5**. The HUD bar shows how long you have before the chain breaks. Getting hit resets the combo.
 
 ### Controls
 
@@ -118,6 +119,8 @@ const BOB_PIXELS     = 2;    // idle-bob height for pizza & chef
 const CHEF_SCARY_RANGE = 3;  // tiles — chef shows 😠 within this range
 const SQUASH_MS      = 260;  // pizza squash animation length on a hit
 const LEVEL_INTRO_MS = 1500; // how long the "Level N: Name" card shows
+const COMBO_WINDOW_MS = 2500;// time between pickups to keep a combo alive
+const COMBO_MAX       = 5;   // hard cap on the combo multiplier
 ```
 Set any of these to `0` to disable that effect. Crank them up for
 extra chaos.

@@ -52,6 +52,10 @@ const CHEF_SCARY_RANGE = 3;   // tiles; chef shows an angry face within this ran
 const SQUASH_MS        = 260; // how long the pizza squashes when losing a life
 const LEVEL_INTRO_MS   = 1500;// how long the "Level N: Name" card stays on screen
 
+// Combo system — grabbing pickups quickly in a row multiplies your score.
+const COMBO_WINDOW_MS  = 2500; // you have this long between pickups to keep the chain alive
+const COMBO_MAX        = 5;    // hard cap on the multiplier (so it stays sane)
+
 // Maze colors — change these to re-theme the restaurant
 const WALL_COLOR       = "#cc0000";  // red walls
 const WALL_HIGHLIGHT   = "#ff4444";  // lighter red stripe on top of walls
@@ -204,6 +208,10 @@ let bannerEndsAt;       // when the banner disappears
 let squashEndsAt;       // timestamp until which the pizza is squashed flat
 let levelIntroUntil;    // timestamp at which the "Level N: Name" card fades out
 
+// Combo state — carried over between levels.
+let comboCount;         // how many pickups in a row (always >= 1)
+let comboLastPickupAt;  // timestamp of the most recent topping pickup
+
 
 // --------------------------------------------------------------------------
 // 4. SET UP THE CANVAS AND GRAB HUD ELEMENTS
@@ -220,6 +228,9 @@ const levelEl          = document.getElementById("level");
 const livesEl          = document.getElementById("lives");
 const starTimerEl      = document.getElementById("star-timer");
 const starSecsEl       = document.getElementById("star-seconds");
+const comboSlotEl      = document.getElementById("combo-slot");
+const comboMultEl      = document.getElementById("combo-mult");
+const comboBarEl       = document.getElementById("combo-bar");
 const winScreen        = document.getElementById("win-screen");        // FINAL win (after last level)
 const loseScreen       = document.getElementById("lose-screen");
 const levelClearScreen = document.getElementById("level-clear-screen"); // between levels
@@ -298,6 +309,9 @@ function startGame(opts = {}) {
   if (!keepScore) {
     score = 0;
     lives = STARTING_LIVES;
+    // Combos only reset on a brand-new game — they carry BETWEEN levels.
+    comboCount        = 1;
+    comboLastPickupAt = 0;
   }
   starPowerEndsAt    = 0;
   gameOver           = false;
@@ -482,15 +496,33 @@ function checkPlayerCollisions() {
   for (let i = toppings.length - 1; i >= 0; i--) {
     if (sameTile(player, toppings[i])) {
       const t = toppings[i];
+      const now = performance.now();
+
+      // --- COMBO math ---
+      // If the last pickup was recent, extend the chain; otherwise reset to 1.
+      const withinWindow = (now - comboLastPickupAt) < COMBO_WINDOW_MS;
+      const oldMultiplier = Math.min(comboCount, COMBO_MAX);
+      if (withinWindow) comboCount += 1;
+      else              comboCount  = 1;
+      const multiplier = Math.min(comboCount, COMBO_MAX);
+      comboLastPickupAt = now;
+
       // Remember where the topping was so we can flash the tile yellow
-      flashes.push({ col: t.col, row: t.row, endsAt: performance.now() + FLASH_MS });
-      // 🎆 Juice: colored burst + floating "+10"
+      flashes.push({ col: t.col, row: t.row, endsAt: now + FLASH_MS });
+      // 🎆 Juice: colored burst + floating "+N"
       const { x, y } = tileCenter(t.col, t.row);
       spawnBurst(x, y, toppingColor(t.emoji), PARTICLE_COUNT);
-      spawnFloatText("+" + POINTS_PER_TOPPING, x, y, "#fff");
+
+      const gained = POINTS_PER_TOPPING * multiplier;
+      spawnFloatText("+" + gained, x, y, multiplier > 1 ? "#ffe14b" : "#fff");
+      // If the multiplier just ticked up, celebrate with a second popup above it.
+      if (multiplier > oldMultiplier && multiplier > 1) {
+        spawnFloatText("x" + multiplier + " COMBO!", x, y - 22, "#ffe14b");
+      }
+
       toppings.splice(i, 1);
-      score += POINTS_PER_TOPPING;
-      playBlip();  // happy pickup sound
+      score += gained;
+      playBlip();
     }
   }
 
@@ -559,6 +591,12 @@ function loseLife() {
   shakeFramesLeft = SHAKE_FRAMES;  // kick off the screen-shake
   hitFlashEndsAt  = performance.now() + HIT_FLASH_MS;
   squashEndsAt    = performance.now() + SQUASH_MS;
+  // Taking a hit breaks your combo (if you had one) — quiet little puff.
+  if (comboCount > 1) {
+    playComboLost();
+    comboCount = 1;
+    comboLastPickupAt = 0;
+  }
   // 🎆 Red burst where the pizza was standing
   const { x, y } = tileCenter(player.col, player.row);
   spawnBurst(x, y, "#ff5050", PARTICLE_COUNT + 6);
@@ -596,6 +634,18 @@ function updateHUD() {
     starTimerEl.classList.remove("hidden");
   } else {
     starTimerEl.classList.add("hidden");
+  }
+
+  // Combo slot: only visible while a chain is active (2x or higher).
+  const multiplier = Math.min(comboCount, COMBO_MAX);
+  if (multiplier > 1) {
+    comboMultEl.textContent = "x" + multiplier;
+    const remaining = COMBO_WINDOW_MS - (performance.now() - comboLastPickupAt);
+    const pct = Math.max(0, Math.min(1, remaining / COMBO_WINDOW_MS));
+    comboBarEl.style.width = (pct * 100) + "%";
+    comboSlotEl.classList.remove("hidden");
+  } else {
+    comboSlotEl.classList.add("hidden");
   }
 }
 
@@ -919,6 +969,16 @@ function drawLevelIntro() {
 // 12. MAIN LOOP — runs forever. Moves things, then redraws the scene.
 // --------------------------------------------------------------------------
 
+// If the player didn't grab anything inside COMBO_WINDOW_MS, the chain
+// quietly resets. Separated out so we can call it every frame.
+function expireComboIfStale(now) {
+  if (comboCount > 1 && (now - comboLastPickupAt) >= COMBO_WINDOW_MS) {
+    playComboLost();
+    comboCount = 1;
+    comboLastPickupAt = 0;
+  }
+}
+
 function gameLoop() {
   const now = performance.now();
   // Intro cards pause the world so the player can read the name.
@@ -926,6 +986,7 @@ function gameLoop() {
   if (!gameOver && !introActive) {
     tryMovePlayer(now);
     moveChef(now);
+    expireComboIfStale(now);
     updateHUD();
   }
   draw();
@@ -1084,6 +1145,12 @@ function playArpeggio() {
   notes.forEach((freq, i) => {
     beep(freq, 0.12, "triangle", 0.18, i * 0.08);
   });
+}
+
+// 💨 Tiny descending "combo lost" puff — quieter than playBuzz.
+function playComboLost() {
+  beep(400, 0.08, "triangle", 0.10, 0.00);
+  beep(260, 0.10, "triangle", 0.10, 0.06);
 }
 
 // 🎉 Short fanfare when you win — a cheerful triad.
