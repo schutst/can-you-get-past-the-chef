@@ -15,6 +15,9 @@
 const TILE_SIZE = 40;           // how big each maze square is, in pixels
 const PLAYER_MOVE_DELAY = 90;   // how fast the pizza can move (smaller = faster)
 const CHEF_MOVE_DELAY   = 400;  // how fast the chef moves  (smaller = faster)
+const CHEF_SMARTNESS    = 0.75; // 0 = fully random, 1 = always chases the pizza.
+                                // 0.75 means he chases 75% of the time and
+                                // picks a random legal direction the other 25%.
 const STARTING_LIVES    = 3;    // how many lives you start with
 const STAR_POWER_SECONDS = 5;   // how long star mode lasts
 const POINTS_PER_TOPPING = 10;  // score for each topping
@@ -199,23 +202,64 @@ function tryMovePlayer(now) {
 
 
 // --------------------------------------------------------------------------
-// 8. CHEF MOVEMENT — picks a random non-wall direction each turn.
+// 8. CHEF MOVEMENT — mostly chases the pizza, but sometimes wanders.
+//
+// The chef uses a very simple kind of AI called a "greedy chase":
+//   * Most of the time, he looks at all 4 directions, throws out the ones
+//     that run into a wall, and picks the one that gets him CLOSEST to
+//     the pizza (measured in "Manhattan distance" = cols apart + rows apart).
+//   * The rest of the time (1 - CHEF_SMARTNESS) he picks any legal
+//     direction at random, so he's beatable and a little unpredictable.
 // --------------------------------------------------------------------------
+
+// Collect every direction from (col, row) that doesn't bump into a wall.
+function legalDirectionsFrom(col, row) {
+  const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+  const legal = [];
+  for (const [dCol, dRow] of dirs) {
+    if (!isWall(col + dCol, row + dRow)) legal.push([dCol, dRow]);
+  }
+  return legal;
+}
+
+// Manhattan distance: how many tiles apart two spots are, ignoring walls.
+function manhattan(aCol, aRow, bCol, bRow) {
+  return Math.abs(aCol - bCol) + Math.abs(aRow - bRow);
+}
 
 function moveChef(now) {
   if (now - lastChefMoveTime < CHEF_MOVE_DELAY) return;
 
-  // Shuffle the 4 directions, then walk in the first one that isn't a wall
-  const dirs = [[0,-1],[0,1],[-1,0],[1,0]].sort(() => Math.random() - 0.5);
-  for (const [dCol, dRow] of dirs) {
-    const nc = chef.col + dCol;
-    const nr = chef.row + dRow;
-    if (!isWall(nc, nr)) {
-      chef.col = nc;
-      chef.row = nr;
-      break;
+  const legal = legalDirectionsFrom(chef.col, chef.row);
+  if (legal.length === 0) { lastChefMoveTime = now; return; } // boxed in
+
+  // Roll the dice: do we chase this turn, or wander?
+  const chase = Math.random() < CHEF_SMARTNESS;
+
+  let chosen;
+  if (chase) {
+    // Greedy chase: pick the direction with the smallest distance to the pizza.
+    // If two directions tie, we pick one of them at random so the chef doesn't
+    // always prefer, say, "up" over "left" in a tie.
+    let bestDist = Infinity;
+    let bestDirs = [];
+    for (const [dCol, dRow] of legal) {
+      const d = manhattan(chef.col + dCol, chef.row + dRow, player.col, player.row);
+      if (d < bestDist) {
+        bestDist = d;
+        bestDirs = [[dCol, dRow]];
+      } else if (d === bestDist) {
+        bestDirs.push([dCol, dRow]);
+      }
     }
+    chosen = bestDirs[Math.floor(Math.random() * bestDirs.length)];
+  } else {
+    // Wander: just pick any legal direction at random.
+    chosen = legal[Math.floor(Math.random() * legal.length)];
   }
+
+  chef.col += chosen[0];
+  chef.row += chosen[1];
   lastChefMoveTime = now;
 
   // Did the chef just walk onto the pizza?

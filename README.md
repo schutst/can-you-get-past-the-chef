@@ -72,6 +72,16 @@ const CHEF_MOVE_DELAY = 400;
 ```
 Try `200` to make the chef actually scary.
 
+### 2b. Make the chef smarter or dumber
+```js
+const CHEF_SMARTNESS = 0.75;
+```
+How often the chef actively chases the pizza instead of wandering randomly.
+- `0` — fully random (original behavior, easiest)
+- `0.5` — chases half the time
+- `0.75` — default; chases most of the time but still surprises you
+- `1` — always chases (hardest)
+
 ### 3. Start with more (or fewer!) lives
 ```js
 const STARTING_LIVES = 3;
