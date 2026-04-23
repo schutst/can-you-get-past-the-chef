@@ -69,8 +69,7 @@ h1 {
 
 /* ----- The game canvas ----- */
 .canvas-wrap {
-  position: relative;             /* so the D-pad can be absolute-positioned over the corner */
-  display: inline-block;          /* shrinks to the canvas so the wrap is exactly as wide as it */
+  display: block;
   max-width: 100%;
 }
 canvas {
@@ -84,16 +83,16 @@ canvas {
   touch-action: none;             /* stop the browser from scrolling/zooming when you swipe the canvas */
 }
 
-/* ----- Touch D-pad (only revealed by JS on touch-capable devices) ----- */
+/* ----- Touch D-pad (only revealed by JS on touch-capable devices) -----
+   Sits in normal flow directly below the canvas so it never covers the
+   maze. justify-content: center packs the 3-column track to the middle. */
 .dpad {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
   display: grid;
   grid-template-columns: repeat(3, 58px);
   grid-template-rows:    repeat(3, 58px);
   gap: 4px;
-  z-index: 5;
+  margin: 16px auto 0;
+  justify-content: center;
   /* Don't let iOS highlight or select on long-press */
   -webkit-user-select: none;
   user-select: none;
