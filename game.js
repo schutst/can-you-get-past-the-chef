@@ -1051,7 +1051,8 @@ function draw() {
   }
 
   const pc = tileCenter(player.col, player.row);
-  const pizzaBobY = bobOffset(0) + (now < squashEndsAt ? 0 : 0); // squash overrides bob feel
+  // Skip the idle-bob while squashing — the squash should own the movement.
+  const pizzaBobY = (now < squashEndsAt) ? 0 : bobOffset(0);
   drawPizza(pc.x, pc.y + pizzaBobY, pizzaSize, {
     facingDx: player.facingDx,
     facingDy: player.facingDy,
