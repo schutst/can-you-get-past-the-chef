@@ -114,6 +114,9 @@ const PARTICLE_COUNT = 14;   // how many circles fly out on a pickup / hit
 const FLOAT_TEXT_MS  = 800;  // how long a "+10" number floats before fading
 const HIT_FLASH_MS   = 80;   // full-canvas red flash on a life-loss hit
 const BANNER_MS      = 900;  // how long the "STAR POWER!" banner stays
+const BOB_PIXELS     = 2;    // idle-bob height for pizza & chef
+const CHEF_SCARY_RANGE = 3;  // tiles — chef shows 😠 within this range
+const SQUASH_MS      = 260;  // pizza squash animation length on a hit
 ```
 Set any of these to `0` to disable that effect. Crank them up for
 extra chaos.
@@ -193,6 +196,7 @@ zero if you want every level to play the same.
 9. **COLLISIONS** — what happens when two things touch
 10. **HUD UPDATE** — refresh the score / lives / star timer
 11. **DRAWING** — paint the scene (with screen-shake + tile flash + pulsing pizza)
+11b. **DRAWING — THE PIZZA FACE** — how each part of the pizza (crust, cheese, pepperoni, eyes, mouth) is drawn with canvas
 12. **MAIN LOOP** — runs forever
 13. **KEYBOARD** — remember which keys are held
 14. **RESTART BUTTONS** — wire up the buttons

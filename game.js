@@ -46,6 +46,11 @@ const FLOAT_TEXT_MS   = 800;  // how long a "+10" number floats before fading
 const HIT_FLASH_MS    = 80;   // brief red full-canvas flash on a life-loss hit
 const BANNER_MS       = 900;  // how long the "STAR POWER!" banner lingers
 
+// Character animation — bobbing, facing, scared-chef range.
+const BOB_PIXELS       = 2;   // pixels the pizza & chef bob up/down at rest
+const CHEF_SCARY_RANGE = 3;   // tiles; chef shows an angry face within this range
+const SQUASH_MS        = 260; // how long the pizza squashes when losing a life
+
 // Maze colors — change these to re-theme the restaurant
 const WALL_COLOR       = "#cc0000";  // red walls
 const WALL_HIGHLIGHT   = "#ff4444";  // lighter red stripe on top of walls
@@ -156,6 +161,7 @@ let floatTexts;         // array of { text, x, y, vy, color, endsAt, bornAt }
 let hitFlashEndsAt;     // timestamp until which we paint a red full-canvas flash
 let bannerText;         // short string shown across the canvas, or ""
 let bannerEndsAt;       // when the banner disappears
+let squashEndsAt;       // timestamp until which the pizza is squashed flat
 
 
 // --------------------------------------------------------------------------
@@ -241,7 +247,9 @@ function startGame(opts = {}) {
   MAZE = LEVELS[currentLevel];
 
   // Reset per-game stuff (or keep it if we're just advancing a level)
-  player   = { col: 0, row: 0 };
+  // facingDx / facingDy is the direction the pizza last tried to move —
+  // used to aim his eyes and to remember how to spawn squash effects.
+  player   = { col: 0, row: 0, facingDx: 1, facingDy: 0 };
   chef     = { col: 0, row: 0 };
   toppings = [];
   spikes   = [];
@@ -262,6 +270,7 @@ function startGame(opts = {}) {
   hitFlashEndsAt     = 0;
   bannerText         = "";
   bannerEndsAt       = 0;
+  squashEndsAt       = 0;
 
   // Walk through the maze characters and place everything in the world
   for (let row = 0; row < ROWS; row++) {
@@ -337,6 +346,11 @@ function tryMovePlayer(now) {
 
   const newCol = player.col + dCol;
   const newRow = player.row + dRow;
+
+  // Always remember which way we WANTED to go, even if a wall stops us —
+  // this lets the eyes look in the direction you pressed.
+  player.facingDx = dCol;
+  player.facingDy = dRow;
 
   // Blocked by a wall? Do nothing.
   if (isWall(newCol, newRow)) return;
@@ -502,6 +516,7 @@ function loseLife() {
   playBuzz();  // sad "ouch" sound
   shakeFramesLeft = SHAKE_FRAMES;  // kick off the screen-shake
   hitFlashEndsAt  = performance.now() + HIT_FLASH_MS;
+  squashEndsAt    = performance.now() + SQUASH_MS;
   // 🎆 Red burst where the pizza was standing
   const { x, y } = tileCenter(player.col, player.row);
   spawnBurst(x, y, "#ff5050", PARTICLE_COUNT + 6);
@@ -557,6 +572,96 @@ function drawEmoji(emoji, col, row, size = TILE_SIZE * 0.8) {
     col * TILE_SIZE + TILE_SIZE / 2,
     row * TILE_SIZE + TILE_SIZE / 2
   );
+}
+
+// Gently bob a thing up and down using a sine of the clock. Different
+// `phase` values offset pizza vs chef so they aren't perfectly synchronized.
+function bobOffset(phase = 0) {
+  return Math.sin((performance.now() / 280) + phase) * BOB_PIXELS;
+}
+
+
+// --------------------------------------------------------------------------
+// 11b. DRAWING — THE PIZZA FACE
+//
+// 🎓 MINI LESSON: drawing with the canvas 2d context
+//
+// Canvas shapes are built one brush stroke at a time. The common pattern is:
+//
+//   ctx.beginPath();           // start a fresh path
+//   ctx.arc(x, y, r, 0, 2π);   // describe a circle
+//   ctx.fillStyle = "...";     // pick a colour
+//   ctx.fill();                // colour it in
+//
+// You can translate / rotate / scale the whole canvas with ctx.save(),
+// ctx.translate(), ctx.scale(), and then ctx.restore() to undo the
+// transforms. That's how we squash the pizza when it gets hurt.
+// --------------------------------------------------------------------------
+
+function drawPizza(cx, cy, size, opts = {}) {
+  const { facingDx = 1, facingDy = 0, nervous = false, scaleY = 1, scaleX = 1 } = opts;
+
+  // Work in a local coordinate system where (0,0) is the pizza's middle —
+  // makes the math for eyes, pepperoni, and mouth much simpler.
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scaleX, scaleY);   // used to squash the pizza on a hit
+
+  const r = size / 2;
+
+  // 1. CRUST — the outer brownish ring.
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = "#b87333";
+  ctx.fill();
+
+  // 2. CHEESE — a slightly smaller yellow circle on top of the crust.
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffd24b";
+  ctx.fill();
+
+  // 3. PEPPERONI — three little red circles at fixed "clock" positions.
+  ctx.fillStyle = "#c4312b";
+  const pepR = r * 0.16;
+  const pepD = r * 0.45;
+  ctx.beginPath(); ctx.arc(-pepD,  pepD * 0.4, pepR, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( pepD,  pepD * 0.4, pepR, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 0,    -pepD * 0.5, pepR, 0, Math.PI * 2); ctx.fill();
+
+  // 4. EYES — two white circles with black pupils that look in the facing direction.
+  const eyeY    = -r * 0.08;
+  const eyeX    =  r * 0.28;
+  const eyeR    =  r * 0.18;
+  const pupilR  =  r * 0.09;
+
+  // White sclera
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath(); ctx.arc(-eyeX, eyeY, eyeR, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( eyeX, eyeY, eyeR, 0, Math.PI * 2); ctx.fill();
+
+  // Pupils — shifted up to a third of the eye radius toward where the pizza is looking
+  const pupilShift = eyeR * 0.4;
+  const shiftX = Math.sign(facingDx) * pupilShift;
+  const shiftY = Math.sign(facingDy) * pupilShift;
+  ctx.fillStyle = "#1a1a1a";
+  ctx.beginPath(); ctx.arc(-eyeX + shiftX, eyeY + shiftY, pupilR, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( eyeX + shiftX, eyeY + shiftY, pupilR, 0, Math.PI * 2); ctx.fill();
+
+  // 5. MOUTH — a curve that smiles normally but frowns when nervous.
+  // A quadratic curve goes: move to A, curve through a control point, end at B.
+  ctx.strokeStyle = "#1a1a1a";
+  ctx.lineWidth   = 2;
+  ctx.lineCap     = "round";
+  const mouthY  = r * 0.28;
+  const mouthW  = r * 0.5;
+  const controlY = nervous ? mouthY - r * 0.18 : mouthY + r * 0.22;
+  ctx.beginPath();
+  ctx.moveTo(-mouthW, mouthY);
+  ctx.quadraticCurveTo(0, controlY, mouthW, mouthY);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 // Track the previous frame's timestamp so particle physics can use real dt.
@@ -618,24 +723,51 @@ function draw() {
   for (const sp of spikes)  drawEmoji("⚠️", sp.col, sp.row, TILE_SIZE * 0.7);
   if (star) drawEmoji("⭐", star.col, star.row);
 
-  // 4. Paint the chef
-  drawEmoji("👨‍🍳", chef.col, chef.row);
+  // 4. Paint the chef — swaps to an angry face when he's close to the pizza.
+  const distToPlayer = manhattan(chef.col, chef.row, player.col, player.row);
+  const chefEmoji    = distToPlayer <= CHEF_SCARY_RANGE ? "😠" : "👨‍🍳";
+  const chefCenter   = tileCenter(chef.col, chef.row);
+  // Gentle idle-bob (phase offset so chef and pizza don't bob in sync).
+  const chefBobY = bobOffset(1.5);
+  ctx.save();
+  ctx.translate(0, chefBobY);
+  drawEmoji(chefEmoji, chef.col, chef.row);
+  ctx.restore();
 
   // 5. Paint the pizza.
   //    - While star power is on, the pizza PULSES (grows and shrinks with time)
   //      and also glows yellow. We use a sine wave of the clock so the pulse
   //      is smooth and repeats forever.
+  //    - When the pizza just lost a life, it squashes flat for a moment.
+  //    - Eyes look in the direction the player last tried to move.
+  //    - On the LAST life, the mouth flips to nervous.
   let pizzaSize = TILE_SIZE * 0.8;
   if (isStarActive()) {
-    // Math.sin returns a number between -1 and 1. We massage it to go
-    // between STAR_PULSE_MIN and STAR_PULSE_MAX instead.
     const wave = (Math.sin(now / 120) + 1) / 2;     // 0.0 → 1.0
     const scale = STAR_PULSE_MIN + wave * (STAR_PULSE_MAX - STAR_PULSE_MIN);
     pizzaSize = TILE_SIZE * 0.8 * scale;
     ctx.shadowColor = "#ffcc00";
     ctx.shadowBlur  = 20;
   }
-  drawEmoji("🍕", player.col, player.row, pizzaSize);
+  // Squash: during the squash window, scaleY < 1 and scaleX > 1 so the pizza
+  // pancakes. We interpolate back to 1.0 as the squash ends.
+  let squashScaleY = 1, squashScaleX = 1;
+  if (now < squashEndsAt) {
+    const t = 1 - ((squashEndsAt - now) / SQUASH_MS);   // 0 → 1
+    const bump = Math.sin(t * Math.PI);                 // 0 → 1 → 0
+    squashScaleY = 1 - bump * 0.45;
+    squashScaleX = 1 + bump * 0.35;
+  }
+
+  const pc = tileCenter(player.col, player.row);
+  const pizzaBobY = bobOffset(0) + (now < squashEndsAt ? 0 : 0); // squash overrides bob feel
+  drawPizza(pc.x, pc.y + pizzaBobY, pizzaSize, {
+    facingDx: player.facingDx,
+    facingDy: player.facingDy,
+    nervous:  lives === 1 && !isStarActive(),
+    scaleY:   squashScaleY,
+    scaleX:   squashScaleX,
+  });
   ctx.shadowBlur = 0;
 
   // 6. Paint particles + floating score text on top of the scene.
