@@ -1181,6 +1181,76 @@ document.addEventListener("keyup", (e) => {
 
 
 // --------------------------------------------------------------------------
+// 13b. TOUCH CONTROLS — on-screen D-pad + swipe-anywhere for iPad/phone.
+//
+// The game was keyboard-first. On a tablet or phone there's no keyboard, so
+// we fake one: a tap on a D-pad button or a swipe across the canvas sets
+// the matching arrow key inside keysHeld[] for a short window (TAP_HOLD_MS).
+// The existing movement code can't tell the difference — from its point of
+// view, somebody just "held the arrow key" for a single step.
+// --------------------------------------------------------------------------
+
+// How long a tap / swipe pretends the arrow key is held. Needs to be >=
+// PLAYER_MOVE_DELAY so the game loop sees at least one movement frame
+// before we let go of the key.
+const TAP_HOLD_MS = 120;
+
+// How far the finger has to move before we call it a swipe (in CSS pixels).
+// Shorter swipes are ignored — they're probably just taps that wiggled.
+const SWIPE_MIN_PX = 25;
+
+// Only reveal the D-pad when the browser actually reports touch support.
+// This keeps desktop looking exactly like it did before.
+const hasTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+const dpadEl   = document.getElementById("dpad");
+if (hasTouch) dpadEl.classList.remove("hidden");
+
+// Pretend a single arrow-key was pressed for TAP_HOLD_MS. Dismisses the
+// level-intro card the same way a real keydown would.
+function tapArrow(key) {
+  if (performance.now() < levelIntroUntil) levelIntroUntil = 0;
+  keysHeld[key] = true;
+  setTimeout(() => { keysHeld[key] = false; }, TAP_HOLD_MS);
+}
+
+// --- D-pad buttons ---
+// On touchstart we preventDefault so iOS doesn't also synthesize a click
+// event 300ms later, and so the browser doesn't zoom on double-tap.
+for (const btn of document.querySelectorAll(".dpad-btn")) {
+  const key = btn.dataset.key;
+  const press = (e) => { e.preventDefault(); tapArrow(key); };
+  btn.addEventListener("touchstart", press, { passive: false });
+  btn.addEventListener("mousedown",  press);                // works with a mouse too, handy for testing
+}
+
+// --- Swipe anywhere on the canvas ---
+// Remember where the finger touched down, then on touchend pick a direction
+// from the largest axis of movement. Tiny wiggles are ignored.
+let swipeStartX = 0, swipeStartY = 0;
+canvas.addEventListener("touchstart", (e) => {
+  e.preventDefault();                                       // no scroll/zoom
+  if (performance.now() < levelIntroUntil) levelIntroUntil = 0;
+  const t = e.touches[0];
+  swipeStartX = t.clientX;
+  swipeStartY = t.clientY;
+}, { passive: false });
+
+canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+canvas.addEventListener("touchend", (e) => {
+  e.preventDefault();
+  const t  = e.changedTouches[0];
+  const dx = t.clientX - swipeStartX;
+  const dy = t.clientY - swipeStartY;
+  if (Math.abs(dx) < SWIPE_MIN_PX && Math.abs(dy) < SWIPE_MIN_PX) return;   // not a swipe
+  let key;
+  if (Math.abs(dx) > Math.abs(dy)) key = dx > 0 ? "ArrowRight" : "ArrowLeft";
+  else                             key = dy > 0 ? "ArrowDown"  : "ArrowUp";
+  tapArrow(key);
+}, { passive: false });
+
+
+// --------------------------------------------------------------------------
 // 14. RESTART BUTTONS — wire every "play again" button to startGame().
 // --------------------------------------------------------------------------
 

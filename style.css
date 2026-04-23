@@ -68,13 +68,55 @@ h1 {
 }
 
 /* ----- The game canvas ----- */
+.canvas-wrap {
+  position: relative;             /* so the D-pad can be absolute-positioned over the corner */
+  display: inline-block;          /* shrinks to the canvas so the wrap is exactly as wide as it */
+  max-width: 100%;
+}
 canvas {
   background: #000;
   border: 4px solid #cc0000;
   border-radius: 10px;
   display: block;
   margin: 0 auto;
+  max-width: 100%;                /* lets the canvas visually shrink on narrow phones */
+  height: auto;
+  touch-action: none;             /* stop the browser from scrolling/zooming when you swipe the canvas */
 }
+
+/* ----- Touch D-pad (only revealed by JS on touch-capable devices) ----- */
+.dpad {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, 58px);
+  grid-template-rows:    repeat(3, 58px);
+  gap: 4px;
+  z-index: 5;
+  /* Don't let iOS highlight or select on long-press */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.dpad-btn {
+  font-size: 30px;
+  font-weight: bold;
+  line-height: 1;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 12px;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  touch-action: manipulation;     /* disable the 300ms double-tap-zoom delay */
+}
+.dpad-btn:active { background: rgba(255, 204, 0, 0.55); }
+.dpad-btn[data-key="ArrowUp"]    { grid-column: 2; grid-row: 1; }
+.dpad-btn[data-key="ArrowLeft"]  { grid-column: 1; grid-row: 2; }
+.dpad-btn[data-key="ArrowDown"]  { grid-column: 2; grid-row: 3; }
+.dpad-btn[data-key="ArrowRight"] { grid-column: 3; grid-row: 2; }
 
 /* ----- Controls area ----- */
 .controls {

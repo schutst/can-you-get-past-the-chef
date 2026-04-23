@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <!-- Viewport: keep the game at its natural size on phones/tablets and stop
+       the browser from pinch-zooming the page while playing. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Can You Get Past The Chef!</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -24,12 +27,24 @@
       <div id="star-timer" class="hidden">⭐ Star Power: <span id="star-seconds">5</span>s</div>
     </div>
 
-    <!-- The actual game is drawn on this canvas -->
-    <canvas id="gameCanvas"></canvas>
+    <!-- The actual game is drawn on this canvas. The wrapper lets us overlay
+         the D-pad in its bottom-left corner (only visible on touch devices). -->
+    <div class="canvas-wrap">
+      <canvas id="gameCanvas"></canvas>
+
+      <!-- On-screen D-pad for phones and tablets. Hidden on desktop; revealed
+           by JavaScript only when the browser reports touch support. -->
+      <div id="dpad" class="dpad hidden" aria-hidden="true">
+        <button class="dpad-btn" data-key="ArrowUp"    aria-label="Up">↑</button>
+        <button class="dpad-btn" data-key="ArrowLeft"  aria-label="Left">←</button>
+        <button class="dpad-btn" data-key="ArrowDown"  aria-label="Down">↓</button>
+        <button class="dpad-btn" data-key="ArrowRight" aria-label="Right">→</button>
+      </div>
+    </div>
 
     <!-- Controls info + restart button -->
     <div class="controls">
-      <p>Move with <b>Arrow Keys</b> or <b>WASD</b></p>
+      <p>Move with <b>Arrow Keys</b>, <b>WASD</b>, or <b>swipe / tap the D-pad</b> on touch screens</p>
       <button id="restartBtn">🔄 Restart</button>
     </div>
 

@@ -24,6 +24,7 @@ Built with plain **HTML + CSS + JavaScript**. No frameworks, no build step, no s
 
 - **Arrow keys** — move up / down / left / right
 - **WASD** — same, just a different hand
+- **Touch screen (iPad / phone)** — a translucent **D-pad** appears in the bottom-left of the canvas. Tap it to move, or **swipe** anywhere on the canvas (up/down/left/right) to move one tile in that direction. The D-pad only shows up when the browser reports touch support, so desktop looks unchanged.
 - **Restart** button — start over any time
 
 ---
