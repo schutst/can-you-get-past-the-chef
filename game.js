@@ -154,7 +154,7 @@ const LEVELS = [
     },
     grid: [
       "111111111111111",
-      "1@0X0000000X001",
+      "1@000000000X001",
       "111010111010111",
       "100P000G0000O01",
       "101010111010101",
@@ -191,6 +191,40 @@ function validateLevels() {
     const count = (ch) => (all.match(new RegExp(ch, "g")) || []).length;
     if (count("G") > 1) warn(`${tag} has ${count("G")} 'G' tiles (max 1)`);
     if (count("F") > 1) warn(`${tag} has ${count("F")} 'F' tiles (max 1)`);
+
+    // REACHABILITY: every topping (P/O/C) must be reachable from the
+    // pizza's starting tile without walking through a wall or a spike.
+    // We use a classic "flood fill" from @ — spread out one tile at a
+    // time, remembering which tiles we've already visited, until we
+    // can't find any new safe floor.
+    const rows = lvl.grid;
+    let startR = -1, startC = -1;
+    rows.forEach((r, rr) => { const cc = r.indexOf("@"); if (cc !== -1) { startR = rr; startC = cc; } });
+    if (startR === -1) return;
+
+    const visited = rows.map(r => r.split("").map(() => false));
+    const queue = [[startR, startC]];
+    visited[startR][startC] = true;
+    const safeFloor = new Set(["0", "@", "E", "P", "O", "C", "S", "G", "F"]);
+    while (queue.length) {
+      const [r, c] = queue.shift();
+      for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nc < 0 || nr >= rows.length || nc >= rows[0].length) continue;
+        if (visited[nr][nc]) continue;
+        if (!safeFloor.has(rows[nr][nc])) continue;  // wall or spike = impassable
+        visited[nr][nc] = true;
+        queue.push([nr, nc]);
+      }
+    }
+    for (let r = 0; r < rows.length; r++) {
+      for (let c = 0; c < rows[0].length; c++) {
+        const ch = rows[r][c];
+        if ("POC".includes(ch) && !visited[r][c]) {
+          warn(`${tag} topping '${ch}' at row ${r} col ${c} is unreachable without stepping on a spike`);
+        }
+      }
+    }
   });
 }
 validateLevels();
