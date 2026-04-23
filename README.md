@@ -110,6 +110,10 @@ const SHAKE_PIXELS   = 6;    // how far the shake jiggles
 const FLASH_MS       = 250;  // yellow flash length on topping pickup
 const STAR_PULSE_MIN = 0.75; // smallest pizza scale during star mode
 const STAR_PULSE_MAX = 1.10; // largest pizza scale during star mode
+const PARTICLE_COUNT = 14;   // how many circles fly out on a pickup / hit
+const FLOAT_TEXT_MS  = 800;  // how long a "+10" number floats before fading
+const HIT_FLASH_MS   = 80;   // full-canvas red flash on a life-loss hit
+const BANNER_MS      = 900;  // how long the "STAR POWER!" banner stays
 ```
 Set any of these to `0` to disable that effect. Crank them up for
 extra chaos.
@@ -194,6 +198,7 @@ zero if you want every level to play the same.
 14. **RESTART BUTTONS** — wire up the buttons
 15. **GO!** — start the first game
 16. **SOUND EFFECTS** — little beeps made with the Web Audio API (no audio files!)
+17. **PARTICLES + FLOATING TEXT** — tiny physics engine for the burst/pop effects
 
 Every section has comments in plain English. Read it top to bottom and it should all make sense.
 

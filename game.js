@@ -40,6 +40,12 @@ const FLASH_MS       = 250;  // how long a "you picked up a topping!" flash last
 const STAR_PULSE_MIN = 0.75; // smallest pizza size multiplier during star mode
 const STAR_PULSE_MAX = 1.10; // largest pizza size multiplier during star mode
 
+// Particles + floating score text — eye-candy that sprays out of every pickup.
+const PARTICLE_COUNT  = 14;   // how many little circles fly out on a pickup/hit
+const FLOAT_TEXT_MS   = 800;  // how long a "+10" number floats before fading
+const HIT_FLASH_MS    = 80;   // brief red full-canvas flash on a life-loss hit
+const BANNER_MS       = 900;  // how long the "STAR POWER!" banner lingers
+
 // Maze colors — change these to re-theme the restaurant
 const WALL_COLOR       = "#cc0000";  // red walls
 const WALL_HIGHLIGHT   = "#ff4444";  // lighter red stripe on top of walls
@@ -145,6 +151,11 @@ let keysHeld;           // object remembering which keys are pressed right now
 // Visual effects state — short-lived stuff that makes the game feel crunchier.
 let shakeFramesLeft;    // counts down to 0; while >0, the canvas gets jittered
 let flashes;            // array of { col, row, endsAt } for recent pickups
+let particles;          // array of { x, y, vx, vy, color, endsAt, bornAt, life }
+let floatTexts;         // array of { text, x, y, vy, color, endsAt, bornAt }
+let hitFlashEndsAt;     // timestamp until which we paint a red full-canvas flash
+let bannerText;         // short string shown across the canvas, or ""
+let bannerEndsAt;       // when the banner disappears
 
 
 // --------------------------------------------------------------------------
@@ -246,6 +257,11 @@ function startGame(opts = {}) {
   keysHeld           = {};
   shakeFramesLeft    = 0;
   flashes            = [];
+  particles          = [];
+  floatTexts         = [];
+  hitFlashEndsAt     = 0;
+  bannerText         = "";
+  bannerEndsAt       = 0;
 
   // Walk through the maze characters and place everything in the world
   for (let row = 0; row < ROWS; row++) {
@@ -409,12 +425,13 @@ function checkPlayerCollisions() {
   // Toppings: collect and add score
   for (let i = toppings.length - 1; i >= 0; i--) {
     if (sameTile(player, toppings[i])) {
+      const t = toppings[i];
       // Remember where the topping was so we can flash the tile yellow
-      flashes.push({
-        col: toppings[i].col,
-        row: toppings[i].row,
-        endsAt: performance.now() + FLASH_MS,
-      });
+      flashes.push({ col: t.col, row: t.row, endsAt: performance.now() + FLASH_MS });
+      // 🎆 Juice: colored burst + floating "+10"
+      const { x, y } = tileCenter(t.col, t.row);
+      spawnBurst(x, y, toppingColor(t.emoji), PARTICLE_COUNT);
+      spawnFloatText("+" + POINTS_PER_TOPPING, x, y, "#fff");
       toppings.splice(i, 1);
       score += POINTS_PER_TOPPING;
       playBlip();  // happy pickup sound
@@ -423,6 +440,9 @@ function checkPlayerCollisions() {
 
   // Star: start star power!
   if (star && sameTile(player, star)) {
+    const { x, y } = tileCenter(star.col, star.row);
+    spawnBurst(x, y, "#ffe14b", PARTICLE_COUNT * 2);   // bigger yellow burst
+    showBanner("STAR POWER!");
     star = null;
     starPowerEndsAt = performance.now() + STAR_POWER_SECONDS * 1000;
     playArpeggio();  // rising "power up!" sound
@@ -440,6 +460,9 @@ function checkPlayerCollisions() {
   if (sameTile(player, chef)) {
     if (isStarActive()) {
       // Pizza smacks the chef back to the kitchen
+      const { x, y } = tileCenter(chef.col, chef.row);
+      spawnBurst(x, y, "#ffd24b", PARTICLE_COUNT + 6);  // gold burst
+      spawnFloatText("+" + POINTS_FOR_CHEF, x, y, "#ffd24b");
       chef.col = chef.startCol;
       chef.row = chef.startRow;
       score += POINTS_FOR_CHEF;
@@ -478,6 +501,10 @@ function loseLife() {
   lives -= 1;
   playBuzz();  // sad "ouch" sound
   shakeFramesLeft = SHAKE_FRAMES;  // kick off the screen-shake
+  hitFlashEndsAt  = performance.now() + HIT_FLASH_MS;
+  // 🎆 Red burst where the pizza was standing
+  const { x, y } = tileCenter(player.col, player.row);
+  spawnBurst(x, y, "#ff5050", PARTICLE_COUNT + 6);
 
   if (lives <= 0) {
     gameOver = true;
@@ -532,7 +559,16 @@ function drawEmoji(emoji, col, row, size = TILE_SIZE * 0.8) {
   );
 }
 
+// Track the previous frame's timestamp so particle physics can use real dt.
+let lastFrameAt = 0;
+
 function draw() {
+  // Real elapsed-time since the last paint, clamped so tab-switching doesn't
+  // produce a giant leap that would launch particles into orbit.
+  const now   = performance.now();
+  const dtMs  = Math.min(50, now - (lastFrameAt || now));
+  lastFrameAt = now;
+
   // Save the canvas state so we can translate (shake) without affecting HUD math
   ctx.save();
 
@@ -565,7 +601,6 @@ function draw() {
 
   // ✨ TILE FLASHES: a quick yellow square where a topping was just grabbed.
   // We fade each flash out based on how much time it has left.
-  const now = performance.now();
   for (let i = flashes.length - 1; i >= 0; i--) {
     const f = flashes[i];
     const remaining = f.endsAt - now;
@@ -602,6 +637,15 @@ function draw() {
   }
   drawEmoji("🍕", player.col, player.row, pizzaSize);
   ctx.shadowBlur = 0;
+
+  // 6. Paint particles + floating score text on top of the scene.
+  updateAndDrawEffects(dtMs);
+
+  // 7. Red full-canvas flash the moment a life is lost.
+  drawHitFlash();
+
+  // 8. Big centred banner ("STAR POWER!") if one is active.
+  drawBanner();
 
   // Restore the canvas so the next frame starts with no translate
   ctx.restore();
@@ -781,5 +825,160 @@ function playFanfare() {
   beep(659, 0.15, "square", 0.18, 0.15);   // E5
   beep(784, 0.30, "square", 0.18, 0.30);   // G5
   beep(1047, 0.45, "square", 0.18, 0.45);  // C6 (held longer)
+}
+
+
+// ==========================================================================
+// 17. PARTICLES + FLOATING TEXT — every fun event spits out some eye-candy.
+//
+// 🎓 MINI LESSON: how a tiny physics engine works
+//
+// A "particle" is just a dot with a position and a velocity. Every frame we
+// do three things to each one:
+//
+//   1. MOVE IT:    position += velocity * time-elapsed
+//   2. SLOW IT:    velocity.y += gravity   (optional — makes it fall)
+//   3. FADE IT:    figure out how "alive" it still is, and paint it with
+//                  less and less opacity as it gets older.
+//
+// When a particle's time is up, we remove it from the list. Do this for a
+// few dozen particles at once and you get a satisfying little firework.
+//
+// Floating text ("+10") is the same idea, just with a letter instead of a
+// circle, and we don't apply gravity — we just let it drift up and fade.
+// --------------------------------------------------------------------------
+
+// Centre pixel of a tile (col, row). Handy when spawning effects.
+function tileCenter(col, row) {
+  return {
+    x: col * TILE_SIZE + TILE_SIZE / 2,
+    y: row * TILE_SIZE + TILE_SIZE / 2,
+  };
+}
+
+// Pick a nice colour for the burst that matches the topping emoji.
+function toppingColor(emoji) {
+  if (emoji === "🍖") return "#ff8a4a";   // warm pepperoni orange
+  if (emoji === "🧀") return "#ffd24b";   // cheesy yellow
+  if (emoji === "⚫") return "#9a7bff";   // olive / purple — readable on black
+  return "#ffffff";
+}
+
+// Spawn `count` particles flying outward from (x, y) with a random angle and
+// speed. Each particle picks up a bit of gravity so the burst feels grounded.
+function spawnBurst(x, y, color, count = PARTICLE_COUNT) {
+  const now = performance.now();
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;       // random direction
+    const speed = 60 + Math.random() * 140;          // pixels per second
+    const life  = 350 + Math.random() * 350;         // ms the particle lives
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color,
+      bornAt: now,
+      endsAt: now + life,
+      life,
+      radius: 2 + Math.random() * 2.5,
+    });
+  }
+}
+
+// A short piece of text that drifts upward and fades away (e.g. "+10").
+function spawnFloatText(text, x, y, color = "#ffffff") {
+  const now = performance.now();
+  floatTexts.push({
+    text, x, y, color,
+    vy: -40,                      // pixels per second (negative = up)
+    bornAt: now,
+    endsAt: now + FLOAT_TEXT_MS,
+  });
+}
+
+// A big banner across the middle of the canvas (e.g. "STAR POWER!").
+function showBanner(text) {
+  bannerText   = text;
+  bannerEndsAt = performance.now() + BANNER_MS;
+}
+
+// Step every particle and floating-text item forward by `dtMs` milliseconds
+// and paint them. Called from draw() once per frame.
+function updateAndDrawEffects(dtMs) {
+  const now = performance.now();
+  const dt  = dtMs / 1000;        // convert ms → seconds for nicer physics math
+  const GRAVITY = 260;            // pixels per second per second, pulled down
+
+  // --- particles ---
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    if (now >= p.endsAt) { particles.splice(i, 1); continue; }
+
+    p.x  += p.vx * dt;
+    p.y  += p.vy * dt;
+    p.vy += GRAVITY * dt;
+
+    // Older particles fade out: alpha goes from 1.0 → 0.0 over their life
+    const alpha = Math.max(0, (p.endsAt - now) / p.life);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle   = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // --- floating text ---
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "middle";
+  ctx.font         = "bold 18px 'Comic Sans MS', sans-serif";
+  for (let i = floatTexts.length - 1; i >= 0; i--) {
+    const f = floatTexts[i];
+    if (now >= f.endsAt) { floatTexts.splice(i, 1); continue; }
+
+    f.y += f.vy * dt;             // drift upward
+    const alpha = (f.endsAt - now) / FLOAT_TEXT_MS;
+    ctx.globalAlpha = alpha;
+    // Black outline for readability on any background
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth   = 3;
+    ctx.strokeText(f.text, f.x, f.y);
+    ctx.fillStyle   = f.color;
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Paint the one-frame red "you got hit!" full-canvas flash, if one is active.
+function drawHitFlash() {
+  const now = performance.now();
+  if (now < hitFlashEndsAt) {
+    const remaining = hitFlashEndsAt - now;
+    ctx.fillStyle = `rgba(255, 0, 0, ${(remaining / HIT_FLASH_MS) * 0.5})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
+// Paint the "STAR POWER!" banner, fading in and out over its lifetime.
+function drawBanner() {
+  const now = performance.now();
+  if (!bannerText || now >= bannerEndsAt) return;
+  const remaining = bannerEndsAt - now;
+  // Alpha: ramp up in the first 150ms, hold, then ramp down the last 300ms.
+  let alpha = 1;
+  const age = BANNER_MS - remaining;
+  if (age < 150) alpha = age / 150;
+  else if (remaining < 300) alpha = remaining / 300;
+
+  ctx.globalAlpha  = alpha;
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "middle";
+  ctx.font         = "bold 44px 'Comic Sans MS', sans-serif";
+  ctx.strokeStyle  = "#000";
+  ctx.lineWidth    = 6;
+  ctx.strokeText(bannerText, canvas.width / 2, canvas.height / 2);
+  ctx.fillStyle    = "#ffe14b";
+  ctx.fillText(bannerText, canvas.width / 2, canvas.height / 2);
+  ctx.globalAlpha  = 1;
 }
 
