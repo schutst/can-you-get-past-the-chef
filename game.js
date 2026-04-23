@@ -24,6 +24,9 @@ const POINTS_PER_TOPPING = 10;  // score for each topping
 const POINTS_FOR_CHEF    = 25;  // score for bonking the chef while starred
 const WIN_BONUS          = 50;  // score for completing the level
 
+// Sound — flip to true to silence all sound effects (useful for classrooms!)
+const MUTED = false;
+
 // Maze colors — change these to re-theme the restaurant
 const WALL_COLOR       = "#cc0000";  // red walls
 const WALL_HIGHLIGHT   = "#ff4444";  // lighter red stripe on top of walls
@@ -277,6 +280,7 @@ function checkPlayerCollisions() {
     if (sameTile(player, toppings[i])) {
       toppings.splice(i, 1);
       score += POINTS_PER_TOPPING;
+      playBlip();  // happy pickup sound
     }
   }
 
@@ -284,6 +288,7 @@ function checkPlayerCollisions() {
   if (star && sameTile(player, star)) {
     star = null;
     starPowerEndsAt = performance.now() + STAR_POWER_SECONDS * 1000;
+    playArpeggio();  // rising "power up!" sound
   }
 
   // Spikes: ouch
@@ -313,6 +318,7 @@ function checkPlayerCollisions() {
     gameOver = true;
     document.getElementById("final-score-win").textContent = score;
     winScreen.classList.remove("hidden");
+    playFanfare();  // victory trumpet!
   }
 
   updateHUD();
@@ -321,6 +327,7 @@ function checkPlayerCollisions() {
 // Called when the pizza touches the chef (without star) or a spike
 function loseLife() {
   lives -= 1;
+  playBuzz();  // sad "ouch" sound
 
   if (lives <= 0) {
     gameOver = true;
@@ -461,3 +468,109 @@ document.getElementById("playAgainLoseBtn").addEventListener("click", startGame)
 
 startGame();
 gameLoop();
+
+
+// ==========================================================================
+// 16. SOUND EFFECTS — made from scratch with the Web Audio API.
+//
+// No sound files! Every beep in this game is built live by the browser
+// using tiny "oscillators" — little math machines that wiggle the speaker.
+//
+// 🎓 MINI LESSON: how a computer makes a sound
+//
+//   1. An OscillatorNode produces a repeating wave at a certain frequency.
+//      Higher frequency (more wiggles per second) = higher pitch.
+//      440 Hz is the musical note "A". 880 Hz is the A one octave higher.
+//
+//   2. A GainNode is a volume knob. If we just connect the oscillator
+//      straight to the speakers, the sound starts and stops with a nasty
+//      CLICK. So instead we ramp the volume UP at the start and DOWN at
+//      the end. That smooth curve is called an "envelope".
+//
+//   3. The "type" of the oscillator changes the tone colour:
+//        "sine"     — smooth and flutey
+//        "square"   — chunky retro video-game
+//        "triangle" — softer chip-tune
+//        "sawtooth" — buzzy and bright
+//
+//   4. Pitches we use (in Hz), roughly:
+//        C = 523, E = 659, G = 784, C(high) = 1047
+//      Play C-E-G-C in a row and you get a happy arpeggio.
+//
+// Browsers block audio until the user touches the page (anti-spam rule),
+// so we create the AudioContext lazily on the first sound.
+// --------------------------------------------------------------------------
+
+let audioCtx = null;
+
+// Lazily create the AudioContext. Returns null if sound is muted or the
+// browser doesn't support Web Audio.
+function getAudio() {
+  if (MUTED) return null;
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;           // very old browser
+    audioCtx = new Ctx();
+  }
+  // Some browsers start the context "suspended" — wake it up.
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+// Play one note. This is the building block the four sound effects use.
+//
+//   freq     : pitch in Hz (e.g. 440 = note A)
+//   duration : how long the note lasts, in seconds
+//   type     : oscillator shape ("sine", "square", "triangle", "sawtooth")
+//   volume   : 0.0 (silent) to 1.0 (loud). Small values, please!
+//   startAt  : when to play it, in seconds from now (for chords/sequences)
+function beep(freq, duration, type = "square", volume = 0.15, startAt = 0) {
+  const ctx = getAudio();
+  if (!ctx) return;
+
+  const osc  = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = type;
+  osc.frequency.value = freq;
+
+  // Envelope: ramp UP quickly, then ramp DOWN to silence before stopping.
+  // Without this ramp you hear a "click" at the start and end of each note.
+  const t0 = ctx.currentTime + startAt;
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(volume, t0 + 0.01);    // fade in
+  gain.gain.linearRampToValueAtTime(0, t0 + duration);     // fade out
+
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + duration + 0.02);
+}
+
+// 🍖 Happy blip when you grab a topping. Short high "ding".
+function playBlip() {
+  beep(880, 0.08, "square", 0.15);   // A5
+}
+
+// ⚠️ Sad low buzz when you lose a life. Two gross low notes back-to-back.
+function playBuzz() {
+  beep(180, 0.18, "sawtooth", 0.18, 0);
+  beep(120, 0.25, "sawtooth", 0.18, 0.15);
+}
+
+// ⭐ Rising arpeggio when you grab the star — C, E, G, high C.
+function playArpeggio() {
+  const notes = [523, 659, 784, 1047];   // C5, E5, G5, C6
+  notes.forEach((freq, i) => {
+    beep(freq, 0.12, "triangle", 0.18, i * 0.08);
+  });
+}
+
+// 🎉 Short fanfare when you win — a cheerful triad.
+function playFanfare() {
+  // Play the triad three times, rising each time.
+  beep(523, 0.15, "square", 0.18, 0.00);   // C5
+  beep(659, 0.15, "square", 0.18, 0.15);   // E5
+  beep(784, 0.30, "square", 0.18, 0.30);   // G5
+  beep(1047, 0.45, "square", 0.18, 0.45);  // C6 (held longer)
+}
+

@@ -94,6 +94,13 @@ const STAR_POWER_SECONDS = 5;
 ```
 Bump it to `10` for double the pizza-rage time.
 
+### 4b. Mute the sound effects
+```js
+const MUTED = false;
+```
+Flip to `true` to play without beeps (classrooms, late at night, etc.).
+The beeps are all made live by the browser — there are no audio files.
+
 ### 5. Change the maze colors
 Still near the top of `game.js`:
 ```js
@@ -156,6 +163,7 @@ Want more pepperoni? Change any `0` to a `P`. Want to move the chef? Change his 
 13. **KEYBOARD** — remember which keys are held
 14. **RESTART BUTTONS** — wire up the buttons
 15. **GO!** — start the first game
+16. **SOUND EFFECTS** — little beeps made with the Web Audio API (no audio files!)
 
 Every section has comments in plain English. Read it top to bottom and it should all make sense.
 
