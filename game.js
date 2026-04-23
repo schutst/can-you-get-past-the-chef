@@ -56,6 +56,10 @@ const LEVEL_INTRO_MS   = 1500;// how long the "Level N: Name" card stays on scre
 const COMBO_WINDOW_MS  = 2500; // you have this long between pickups to keep the chain alive
 const COMBO_MAX        = 5;    // hard cap on the multiplier (so it stays sane)
 
+// Golden bonus and freeze clock — rare pickups that spice up levels 2 and 3.
+const GOLDEN_POINTS    = 50;   // score for grabbing the 🏆 golden bonus
+const FREEZE_SECONDS   = 3;    // how long the chef stands still after a ⏱ pickup
+
 // Maze colors — change these to re-theme the restaurant
 const WALL_COLOR       = "#cc0000";  // red walls
 const WALL_HIGHLIGHT   = "#ff4444";  // lighter red stripe on top of walls
@@ -68,9 +72,10 @@ const BACKGROUND_COLOR = "#000000";  // black background
 //    Legend:
 //      1 = wall        X = spike (danger!)
 //      0 = empty floor S = star power-up
-//      P = pepperoni   @ = pizza starting spot
-//      O = olive       E = chef (enemy) starting spot
-//      C = cheese
+//      P = pepperoni   G = 🏆 golden bonus  (+GOLDEN_POINTS, max 1 per level)
+//      O = olive       F = ⏱ freeze clock  (freezes chef, max 1 per level)
+//      C = cheese      @ = pizza starting spot
+//                      E = chef (enemy) starting spot
 //
 //    Rules:
 //      - Every row in a level must have the same length.
@@ -78,7 +83,8 @@ const BACKGROUND_COLOR = "#000000";  // black background
 //      - Each level should have at least one P, O, and C (the three toppings)
 //        so "collect all toppings" works.
 //
-//    Add your own level by appending another array of strings to LEVELS.
+//    Add your own level by appending another { name, theme, grid } object
+//    to LEVELS.
 // --------------------------------------------------------------------------
 
 // Each level now has a name + a grid + a visual THEME so levels can look
@@ -125,11 +131,11 @@ const LEVELS = [
       "111111111111111",
       "1@000X00000O001",
       "101110111011101",
-      "10000000S000001",
+      "100F0000S000001",
       "101010101010101",
       "10P0X000X000X01",
       "101010101010101",
-      "10000000000C001",
+      "10000G00000C001",
       "101110111011101",
       "10X0000E00000X1",
       "111111111111111",
@@ -150,17 +156,44 @@ const LEVELS = [
       "111111111111111",
       "1@0X0000000X001",
       "111010111010111",
-      "100P00000000O01",
+      "100P000G0000O01",
       "101010111010101",
       "100X00S00X00001",
       "101010111010101",
-      "10000X000X0C001",
+      "10F00X000X0C001",
       "111010111010111",
       "10X0000E000X001",
       "111111111111111",
     ],
   },
 ];
+
+// Tiny built-in level validator. Runs once at startup and prints friendly
+// warnings in the browser's Developer Console if a level looks broken.
+// Open the page, press F12, and look at the "Console" tab to see them.
+function validateLevels() {
+  const baseRows = LEVELS[0].grid.length;
+  const baseCols = LEVELS[0].grid[0].length;
+  const warn = (msg) => console.warn("[level check]", msg);
+
+  LEVELS.forEach((lvl, i) => {
+    const tag = `level ${i + 1} (${lvl.name || "?"}):`;
+    if (!lvl.grid) return warn(`${tag} no .grid`);
+    if (lvl.grid.length !== baseRows) warn(`${tag} has ${lvl.grid.length} rows, expected ${baseRows}`);
+    lvl.grid.forEach((row, r) => {
+      if (row.length !== baseCols) warn(`${tag} row ${r} is ${row.length} wide, expected ${baseCols}`);
+    });
+    const all = lvl.grid.join("");
+    for (const req of ["P", "O", "C", "@", "E"]) {
+      if (!all.includes(req)) warn(`${tag} missing required character '${req}'`);
+    }
+    // Max one golden bonus and one freeze clock per level.
+    const count = (ch) => (all.match(new RegExp(ch, "g")) || []).length;
+    if (count("G") > 1) warn(`${tag} has ${count("G")} 'G' tiles (max 1)`);
+    if (count("F") > 1) warn(`${tag} has ${count("F")} 'F' tiles (max 1)`);
+  });
+}
+validateLevels();
 
 // ROWS and COLS are locked to level 1's size. For simplicity all levels in
 // LEVELS must be the same width and height — the canvas is sized once.
@@ -189,6 +222,9 @@ let chef;               // { col, row, startCol, startRow }
 let toppings;           // array of { col, row, emoji }
 let spikes;             // array of { col, row }
 let star;               // { col, row } or null once collected
+let goldenBonus;        // { col, row } or null once collected
+let freezeClock;        // { col, row } or null once collected
+let chefFrozenUntil;    // timestamp when the chef unfreezes (0 = not frozen)
 let score;
 let lives;
 let starPowerEndsAt;    // timestamp in ms when star power expires (0 = off)
@@ -306,6 +342,9 @@ function startGame(opts = {}) {
   toppings = [];
   spikes   = [];
   star     = null;
+  goldenBonus     = null;
+  freezeClock     = null;
+  chefFrozenUntil = 0;
   if (!keepScore) {
     score = 0;
     lives = STARTING_LIVES;
@@ -339,6 +378,8 @@ function startGame(opts = {}) {
       if (ch === "C") toppings.push({ col, row, emoji: "🧀" });
       if (ch === "X") spikes.push({ col, row });
       if (ch === "S") star = { col, row };
+      if (ch === "G") goldenBonus = { col, row };
+      if (ch === "F") freezeClock = { col, row };
     }
   }
 
@@ -448,6 +489,8 @@ function manhattan(aCol, aRow, bCol, bRow) {
 }
 
 function moveChef(now) {
+  // If a freeze clock is active, the chef just stands there.
+  if (now < chefFrozenUntil) return;
   if (now - lastChefMoveTime < chefDelayFor(currentLevel)) return;
 
   const legal = legalDirectionsFrom(chef.col, chef.row);
@@ -534,6 +577,26 @@ function checkPlayerCollisions() {
     star = null;
     starPowerEndsAt = performance.now() + STAR_POWER_SECONDS * 1000;
     playArpeggio();  // rising "power up!" sound
+  }
+
+  // 🏆 Golden bonus: big score, gold burst, special popup.
+  if (goldenBonus && sameTile(player, goldenBonus)) {
+    const { x, y } = tileCenter(goldenBonus.col, goldenBonus.row);
+    spawnBurst(x, y, "#ffd24b", PARTICLE_COUNT + 10);
+    spawnFloatText("+" + GOLDEN_POINTS, x, y, "#ffd24b");
+    score += GOLDEN_POINTS;
+    goldenBonus = null;
+    playArpeggio();   // re-use the "good stuff!" arpeggio
+  }
+
+  // ⏱ Freeze clock: stop the chef in his tracks for a few seconds.
+  if (freezeClock && sameTile(player, freezeClock)) {
+    const { x, y } = tileCenter(freezeClock.col, freezeClock.row);
+    spawnBurst(x, y, "#a7f0ff", PARTICLE_COUNT + 4);   // icy-cyan burst
+    showBanner("CHEF FROZEN!");
+    freezeClock = null;
+    chefFrozenUntil = performance.now() + FREEZE_SECONDS * 1000;
+    playBlip();
   }
 
   // Spikes: ouch
@@ -850,18 +913,39 @@ function draw() {
   // 3. Paint pickups and hazards
   for (const t of toppings) drawEmoji(t.emoji, t.col, t.row, TILE_SIZE * 0.6);
   for (const sp of spikes)  drawEmoji("⚠️", sp.col, sp.row, TILE_SIZE * 0.7);
-  if (star) drawEmoji("⭐", star.col, star.row);
+  if (star)        drawEmoji("⭐",  star.col,        star.row);
+  if (goldenBonus) drawEmoji("🏆",  goldenBonus.col, goldenBonus.row, TILE_SIZE * 0.7);
+  if (freezeClock) drawEmoji("⏱",   freezeClock.col, freezeClock.row, TILE_SIZE * 0.7);
 
-  // 4. Paint the chef — swaps to an angry face when he's close to the pizza.
+  // 4. Paint the chef — swaps to an angry face when he's close to the pizza,
+  //    and stops bobbing when he's frozen by a ⏱ clock.
   const distToPlayer = manhattan(chef.col, chef.row, player.col, player.row);
-  const chefEmoji    = distToPlayer <= CHEF_SCARY_RANGE ? "😠" : "👨‍🍳";
-  const chefCenter   = tileCenter(chef.col, chef.row);
-  // Gentle idle-bob (phase offset so chef and pizza don't bob in sync).
-  const chefBobY = bobOffset(1.5);
+  const chefFrozen   = now < chefFrozenUntil;
+  const chefEmoji    = chefFrozen
+    ? "🥶"
+    : (distToPlayer <= CHEF_SCARY_RANGE ? "😠" : "👨‍🍳");
+  const chefBobY = chefFrozen ? 0 : bobOffset(1.5);
   ctx.save();
   ctx.translate(0, chefBobY);
   drawEmoji(chefEmoji, chef.col, chef.row);
   ctx.restore();
+
+  // Snowflake + countdown overlay on a frozen chef.
+  if (chefFrozen) {
+    const remaining = (chefFrozenUntil - now) / 1000;
+    const chefC = tileCenter(chef.col, chef.row);
+    drawEmoji("❄️", chef.col, chef.row - 0.55, TILE_SIZE * 0.5);
+    ctx.font         = "bold 14px 'Comic Sans MS', sans-serif";
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "middle";
+    ctx.strokeStyle  = "#000";
+    ctx.lineWidth    = 3;
+    const txt = remaining.toFixed(1) + "s";
+    const cy  = chefC.y + TILE_SIZE * 0.45;
+    ctx.strokeText(txt, chefC.x, cy);
+    ctx.fillStyle    = "#a7f0ff";
+    ctx.fillText(    txt, chefC.x, cy);
+  }
 
   // 5. Paint the pizza.
   //    - While star power is on, the pizza PULSES (grows and shrinks with time)

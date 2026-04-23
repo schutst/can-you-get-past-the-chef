@@ -18,6 +18,7 @@ Built with plain **HTML + CSS + JavaScript**. No frameworks, no build step, no s
 8. You start with 3 lives. If all lives are lost, the chef wins.
 9. The game remembers your **best score** ever, even after you close the tab. Beat it!
 10. Grab toppings in quick succession to build a **combo** — each one multiplies your score up to **x5**. The HUD bar shows how long you have before the chain breaks. Getting hit resets the combo.
+11. Look for rare pickups: 🏆 **Golden bonus** (+50 score) and ⏱ **Freeze clock** (freezes the chef for 3 seconds so you can reposition).
 
 ### Controls
 
@@ -121,6 +122,8 @@ const SQUASH_MS      = 260;  // pizza squash animation length on a hit
 const LEVEL_INTRO_MS = 1500; // how long the "Level N: Name" card shows
 const COMBO_WINDOW_MS = 2500;// time between pickups to keep a combo alive
 const COMBO_MAX       = 5;   // hard cap on the combo multiplier
+const GOLDEN_POINTS   = 50;  // score awarded for grabbing a 🏆 golden bonus
+const FREEZE_SECONDS  = 3;   // how long the chef stays frozen after a ⏱ pickup
 ```
 Set any of these to `0` to disable that effect. Crank them up for
 extra chaos.
@@ -174,6 +177,8 @@ Each character in a level is one square of the maze:
 | `C` | 🧀 cheese topping |
 | `X` | ⚠️ spike (dangerous!) |
 | `S` | ⭐ star power-up |
+| `G` | 🏆 golden bonus (big score, **max 1 per level**) |
+| `F` | ⏱ freeze clock (stops the chef, **max 1 per level**) |
 | `@` | where the pizza starts |
 | `E` | where the chef starts |
 
