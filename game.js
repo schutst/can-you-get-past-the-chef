@@ -105,11 +105,50 @@ canvas.height = ROWS * TILE_SIZE;
 const ctx = canvas.getContext("2d");
 
 const scoreEl     = document.getElementById("score");
+const bestEl      = document.getElementById("best");
 const livesEl     = document.getElementById("lives");
 const starTimerEl = document.getElementById("star-timer");
 const starSecsEl  = document.getElementById("star-seconds");
 const winScreen   = document.getElementById("win-screen");
 const loseScreen  = document.getElementById("lose-screen");
+
+
+// --------------------------------------------------------------------------
+// 4b. HIGH SCORE — remembered between visits using the browser's localStorage.
+//
+// localStorage is a tiny notebook the browser keeps for this page. Whatever
+// we save there stays even after you close the tab or reboot the computer.
+// We only save one thing: a single number under the key BEST_KEY.
+// --------------------------------------------------------------------------
+
+const BEST_KEY = "pizzaChefBestScore";
+
+function loadBestScore() {
+  try {
+    const stored = localStorage.getItem(BEST_KEY);
+    const n = parseInt(stored, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch (e) {
+    // Some browsers (private mode, strict settings) throw here. That's fine —
+    // we just won't remember scores this session.
+    return 0;
+  }
+}
+
+function saveBestScore(n) {
+  try { localStorage.setItem(BEST_KEY, String(n)); } catch (e) { /* ignore */ }
+}
+
+// If the final score beats the stored best, save it and bump the HUD.
+function maybeUpdateBestScore() {
+  if (score > bestScore) {
+    bestScore = score;
+    saveBestScore(bestScore);
+  }
+  bestEl.textContent = bestScore;
+}
+
+let bestScore = loadBestScore();
 
 
 // --------------------------------------------------------------------------
@@ -156,6 +195,7 @@ function startGame() {
   // Hide win/lose screens and refresh the HUD
   winScreen.classList.add("hidden");
   loseScreen.classList.add("hidden");
+  bestEl.textContent = bestScore;    // keep the "Best" number in sync
   updateHUD();
 }
 
@@ -336,7 +376,9 @@ function checkPlayerCollisions() {
   if (toppings.length === 0) {
     score += WIN_BONUS;
     gameOver = true;
+    maybeUpdateBestScore();
     document.getElementById("final-score-win").textContent = score;
+    document.getElementById("best-score-win").textContent  = bestScore;
     winScreen.classList.remove("hidden");
     playFanfare();  // victory trumpet!
   }
@@ -352,7 +394,9 @@ function loseLife() {
 
   if (lives <= 0) {
     gameOver = true;
+    maybeUpdateBestScore();
     document.getElementById("final-score-lose").textContent = score;
+    document.getElementById("best-score-lose").textContent  = bestScore;
     loseScreen.classList.remove("hidden");
     return;
   }
@@ -521,6 +565,17 @@ document.addEventListener("keyup", (e) => {
 document.getElementById("restartBtn").addEventListener("click", startGame);
 document.getElementById("playAgainWinBtn").addEventListener("click", startGame);
 document.getElementById("playAgainLoseBtn").addEventListener("click", startGame);
+
+// "Reset Best Score" wipes the remembered best score back to 0.
+function resetBestScore() {
+  bestScore = 0;
+  saveBestScore(0);
+  bestEl.textContent = 0;
+  document.getElementById("best-score-win").textContent  = 0;
+  document.getElementById("best-score-lose").textContent = 0;
+}
+document.getElementById("resetBestWinBtn").addEventListener("click", resetBestScore);
+document.getElementById("resetBestLoseBtn").addEventListener("click", resetBestScore);
 
 
 // --------------------------------------------------------------------------

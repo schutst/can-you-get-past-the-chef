@@ -11,9 +11,10 @@
     <!-- Game title -->
     <h1>🍕 Can You Get Past The Chef! 👨‍🍳</h1>
 
-    <!-- HUD: score, lives, and the star power timer (hidden unless active) -->
+    <!-- HUD: score, best score, lives, and the star power timer (hidden unless active) -->
     <div class="hud">
       <div>Score: <span id="score">0</span></div>
+      <div>Best: <span id="best">0</span></div>
       <div>Lives: <span id="lives">❤️❤️❤️</span></div>
       <div id="star-timer" class="hidden">⭐ Star Power: <span id="star-seconds">5</span>s</div>
     </div>
@@ -33,7 +34,9 @@
         <h2>🎉 You Win! 🎉</h2>
         <p>You got past the chef!</p>
         <p>Final Score: <span id="final-score-win">0</span></p>
+        <p>Best Score: <span id="best-score-win">0</span></p>
         <button id="playAgainWinBtn">Play Again</button>
+        <button id="resetBestWinBtn" class="secondary">Reset Best Score</button>
       </div>
     </div>
 
@@ -43,7 +46,9 @@
         <h2>😢 The Chef Got You!</h2>
         <p>Try again — you can do it!</p>
         <p>Final Score: <span id="final-score-lose">0</span></p>
+        <p>Best Score: <span id="best-score-lose">0</span></p>
         <button id="playAgainLoseBtn">Play Again</button>
+        <button id="resetBestLoseBtn" class="secondary">Reset Best Score</button>
       </div>
     </div>
 

@@ -78,6 +78,15 @@ button {
 }
 button:hover { background: #ff3333; }
 
+/* Smaller, less-shouty "secondary" button — used for Reset Best Score */
+button.secondary {
+  background: #444;
+  font-size: 14px;
+  padding: 6px 14px;
+  margin-left: 10px;
+}
+button.secondary:hover { background: #666; }
+
 /* ----- Overlays used for the Win and Lose screens ----- */
 .overlay {
   position: fixed;

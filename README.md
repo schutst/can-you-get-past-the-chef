@@ -15,6 +15,7 @@ Built with plain **HTML + CSS + JavaScript**. No frameworks, no build step, no s
 5. Grab the ⭐ star for 5 seconds of **star power** — during star mode, touching the chef sends him back to the kitchen.
 6. Collect all toppings to **win**.
 7. You start with 3 lives. If all lives are lost, the chef wins.
+8. The game remembers your **best score** ever, even after you close the tab. Beat it!
 
 ### Controls
 
