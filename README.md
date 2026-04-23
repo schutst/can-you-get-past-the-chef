@@ -101,6 +101,17 @@ const MUTED = false;
 Flip to `true` to play without beeps (classrooms, late at night, etc.).
 The beeps are all made live by the browser — there are no audio files.
 
+### 4c. Tweak the "juice" (little polish effects)
+```js
+const SHAKE_FRAMES   = 10;   // screen-shake length when you get hit
+const SHAKE_PIXELS   = 6;    // how far the shake jiggles
+const FLASH_MS       = 250;  // yellow flash length on topping pickup
+const STAR_PULSE_MIN = 0.75; // smallest pizza scale during star mode
+const STAR_PULSE_MAX = 1.10; // largest pizza scale during star mode
+```
+Set any of these to `0` to disable that effect. Crank them up for
+extra chaos.
+
 ### 5. Change the maze colors
 Still near the top of `game.js`:
 ```js

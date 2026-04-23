@@ -27,6 +27,14 @@ const WIN_BONUS          = 50;  // score for completing the level
 // Sound — flip to true to silence all sound effects (useful for classrooms!)
 const MUTED = false;
 
+// Visual "juice" (small polish effects) — each knob is a number of frames
+// or milliseconds. Set any of them to 0 to turn that effect off.
+const SHAKE_FRAMES   = 10;   // how many frames the screen shakes when you get hit
+const SHAKE_PIXELS   = 6;    // maximum jitter distance in pixels
+const FLASH_MS       = 250;  // how long a "you picked up a topping!" flash lasts
+const STAR_PULSE_MIN = 0.75; // smallest pizza size multiplier during star mode
+const STAR_PULSE_MAX = 1.10; // largest pizza size multiplier during star mode
+
 // Maze colors — change these to re-theme the restaurant
 const WALL_COLOR       = "#cc0000";  // red walls
 const WALL_HIGHLIGHT   = "#ff4444";  // lighter red stripe on top of walls
@@ -82,6 +90,10 @@ let lastPlayerMoveTime; // used to throttle the pizza so it doesn't teleport
 let lastChefMoveTime;   // used to throttle the chef
 let keysHeld;           // object remembering which keys are pressed right now
 
+// Visual effects state — short-lived stuff that makes the game feel crunchier.
+let shakeFramesLeft;    // counts down to 0; while >0, the canvas gets jittered
+let flashes;            // array of { col, row, endsAt } for recent pickups
+
 
 // --------------------------------------------------------------------------
 // 4. SET UP THE CANVAS AND GRAB HUD ELEMENTS
@@ -118,6 +130,8 @@ function startGame() {
   lastPlayerMoveTime = 0;
   lastChefMoveTime   = 0;
   keysHeld           = {};
+  shakeFramesLeft    = 0;
+  flashes            = [];
 
   // Walk through the maze characters and place everything in the world
   for (let row = 0; row < ROWS; row++) {
@@ -278,6 +292,12 @@ function checkPlayerCollisions() {
   // Toppings: collect and add score
   for (let i = toppings.length - 1; i >= 0; i--) {
     if (sameTile(player, toppings[i])) {
+      // Remember where the topping was so we can flash the tile yellow
+      flashes.push({
+        col: toppings[i].col,
+        row: toppings[i].row,
+        endsAt: performance.now() + FLASH_MS,
+      });
       toppings.splice(i, 1);
       score += POINTS_PER_TOPPING;
       playBlip();  // happy pickup sound
@@ -328,6 +348,7 @@ function checkPlayerCollisions() {
 function loseLife() {
   lives -= 1;
   playBuzz();  // sad "ouch" sound
+  shakeFramesLeft = SHAKE_FRAMES;  // kick off the screen-shake
 
   if (lives <= 0) {
     gameOver = true;
@@ -381,6 +402,19 @@ function drawEmoji(emoji, col, row, size = TILE_SIZE * 0.8) {
 }
 
 function draw() {
+  // Save the canvas state so we can translate (shake) without affecting HUD math
+  ctx.save();
+
+  // ✨ SCREEN-SHAKE: if the player was just hit, jitter the whole canvas
+  // a few pixels for a handful of frames. ctx.translate shifts everything
+  // we draw afterwards.
+  if (shakeFramesLeft > 0) {
+    const dx = (Math.random() - 0.5) * 2 * SHAKE_PIXELS;
+    const dy = (Math.random() - 0.5) * 2 * SHAKE_PIXELS;
+    ctx.translate(dx, dy);
+    shakeFramesLeft -= 1;
+  }
+
   // 1. Paint the background
   ctx.fillStyle = BACKGROUND_COLOR;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -398,6 +432,21 @@ function draw() {
     }
   }
 
+  // ✨ TILE FLASHES: a quick yellow square where a topping was just grabbed.
+  // We fade each flash out based on how much time it has left.
+  const now = performance.now();
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    const f = flashes[i];
+    const remaining = f.endsAt - now;
+    if (remaining <= 0) {
+      flashes.splice(i, 1);                    // expired, remove it
+      continue;
+    }
+    const alpha = remaining / FLASH_MS;        // 1.0 → 0.0 as it fades
+    ctx.fillStyle = `rgba(255, 220, 80, ${alpha})`;
+    ctx.fillRect(f.col * TILE_SIZE, f.row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+  }
+
   // 3. Paint pickups and hazards
   for (const t of toppings) drawEmoji(t.emoji, t.col, t.row, TILE_SIZE * 0.6);
   for (const sp of spikes)  drawEmoji("⚠️", sp.col, sp.row, TILE_SIZE * 0.7);
@@ -406,13 +455,25 @@ function draw() {
   // 4. Paint the chef
   drawEmoji("👨‍🍳", chef.col, chef.row);
 
-  // 5. Paint the pizza (with a glow if star power is active)
+  // 5. Paint the pizza.
+  //    - While star power is on, the pizza PULSES (grows and shrinks with time)
+  //      and also glows yellow. We use a sine wave of the clock so the pulse
+  //      is smooth and repeats forever.
+  let pizzaSize = TILE_SIZE * 0.8;
   if (isStarActive()) {
+    // Math.sin returns a number between -1 and 1. We massage it to go
+    // between STAR_PULSE_MIN and STAR_PULSE_MAX instead.
+    const wave = (Math.sin(now / 120) + 1) / 2;     // 0.0 → 1.0
+    const scale = STAR_PULSE_MIN + wave * (STAR_PULSE_MAX - STAR_PULSE_MIN);
+    pizzaSize = TILE_SIZE * 0.8 * scale;
     ctx.shadowColor = "#ffcc00";
     ctx.shadowBlur  = 20;
   }
-  drawEmoji("🍕", player.col, player.row);
+  drawEmoji("🍕", player.col, player.row, pizzaSize);
   ctx.shadowBlur = 0;
+
+  // Restore the canvas so the next frame starts with no translate
+  ctx.restore();
 }
 
 
