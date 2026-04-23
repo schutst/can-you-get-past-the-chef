@@ -798,53 +798,97 @@ function drawPizza(cx, cy, size, opts = {}) {
 
   const r = size / 2;
 
-  // 1. CRUST — the outer brownish ring.
+  // 1. CRUST — a tanned golden-brown ring at the very edge of the pizza.
+  //    We draw the dark crust as one full circle, then paint a slightly
+  //    smaller lighter circle on top. The bit of darker colour left
+  //    showing at the very rim becomes the "crust ring".
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fillStyle = "#b87333";
+  ctx.fillStyle = "#9a5b1d";           // dark baked-crust brown
   ctx.fill();
 
-  // 2. CHEESE — a slightly smaller yellow circle on top of the crust.
+  // 2. CRUST RIM HIGHLIGHT — the browner inner band of the crust.
   ctx.beginPath();
-  ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffd24b";
+  ctx.arc(0, 0, r * 0.92, 0, Math.PI * 2);
+  ctx.fillStyle = "#d69a3f";
   ctx.fill();
 
-  // 3. PEPPERONI — three little red circles at fixed "clock" positions.
-  ctx.fillStyle = "#c4312b";
-  const pepR = r * 0.16;
-  const pepD = r * 0.45;
-  ctx.beginPath(); ctx.arc(-pepD,  pepD * 0.4, pepR, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc( pepD,  pepD * 0.4, pepR, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc( 0,    -pepD * 0.5, pepR, 0, Math.PI * 2); ctx.fill();
+  // 3. CHEESE — the golden-orange centre where the face lives.
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.80, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffce3e";
+  ctx.fill();
 
-  // 4. EYES — two white circles with black pupils that look in the facing direction.
-  const eyeY    = -r * 0.08;
-  const eyeX    =  r * 0.28;
-  const eyeR    =  r * 0.18;
-  const pupilR  =  r * 0.09;
+  // 4. MELTED-CHEESE HIGHLIGHTS — a couple of lighter blobs make the cheese
+  //    look gooey instead of a flat disc. Positioned off-centre so they
+  //    feel random, not geometric.
+  ctx.fillStyle = "#ffe48a";
+  ctx.beginPath(); ctx.arc(-r * 0.32, -r * 0.38, r * 0.09, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( r * 0.42,  r * 0.22, r * 0.07, 0, Math.PI * 2); ctx.fill();
 
-  // White sclera
+  // 5. PEPPERONI — four slices arranged around the face zone, not on top
+  //    of it. Each one has a darker outer ring and a brighter inner top,
+  //    so it still reads as a pepperoni slice at small sizes.
+  const pepR = r * 0.17;
+  const pepPositions = [
+    [-r * 0.48, -r * 0.18],   // upper-left (above the left eye)
+    [ r * 0.48, -r * 0.18],   // upper-right
+    [-r * 0.48,  r * 0.42],   // lower-left (below the mouth)
+    [ r * 0.48,  r * 0.42],   // lower-right
+    [ 0,        -r * 0.58],   // top-centre (between the "ears")
+  ];
+  for (const [px, py] of pepPositions) {
+    ctx.beginPath();
+    ctx.arc(px, py, pepR, 0, Math.PI * 2);
+    ctx.fillStyle = "#7a1a1a";          // darker outer ring of the pepperoni
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(px, py, pepR * 0.78, 0, Math.PI * 2);
+    ctx.fillStyle = "#d0372e";          // bright red top
+    ctx.fill();
+    // Tiny dark speck for the classic pepperoni grease-spot look.
+    ctx.beginPath();
+    ctx.arc(px + pepR * 0.25, py - pepR * 0.15, pepR * 0.18, 0, Math.PI * 2);
+    ctx.fillStyle = "#6a1313";
+    ctx.fill();
+  }
+
+  // 6. EYES — two whites with pupils that slide in the direction the
+  //    pizza last tried to move. A tiny white sparkle on each pupil
+  //    makes them feel alive instead of dead-eyed.
+  const eyeY    = -r * 0.02;
+  const eyeX    =  r * 0.20;
+  const eyeR    =  r * 0.14;
+  const pupilR  =  r * 0.07;
+
   ctx.fillStyle = "#ffffff";
   ctx.beginPath(); ctx.arc(-eyeX, eyeY, eyeR, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc( eyeX, eyeY, eyeR, 0, Math.PI * 2); ctx.fill();
 
-  // Pupils — shifted up to a third of the eye radius toward where the pizza is looking
-  const pupilShift = eyeR * 0.4;
+  const pupilShift = eyeR * 0.45;
   const shiftX = Math.sign(facingDx) * pupilShift;
   const shiftY = Math.sign(facingDy) * pupilShift;
   ctx.fillStyle = "#1a1a1a";
   ctx.beginPath(); ctx.arc(-eyeX + shiftX, eyeY + shiftY, pupilR, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc( eyeX + shiftX, eyeY + shiftY, pupilR, 0, Math.PI * 2); ctx.fill();
 
-  // 5. MOUTH — a curve that smiles normally but frowns when nervous.
-  // A quadratic curve goes: move to A, curve through a control point, end at B.
+  ctx.fillStyle = "#ffffff";
+  const sparkR = pupilR * 0.38;
+  ctx.beginPath();
+  ctx.arc(-eyeX + shiftX - pupilR * 0.25, eyeY + shiftY - pupilR * 0.28, sparkR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc( eyeX + shiftX - pupilR * 0.25, eyeY + shiftY - pupilR * 0.28, sparkR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 7. MOUTH — a smiling quadratic curve. Flips to nervous on the last life.
+  //    A quadratic curve goes: move to A, curve through a control point, end at B.
   ctx.strokeStyle = "#1a1a1a";
-  ctx.lineWidth   = 2;
+  ctx.lineWidth   = Math.max(2, r * 0.12);  // scales with the pizza so it doesn't vanish when squashed
   ctx.lineCap     = "round";
-  const mouthY  = r * 0.28;
-  const mouthW  = r * 0.5;
-  const controlY = nervous ? mouthY - r * 0.18 : mouthY + r * 0.22;
+  const mouthY  = r * 0.20;
+  const mouthW  = r * 0.28;
+  const controlY = nervous ? mouthY - r * 0.14 : mouthY + r * 0.22;
   ctx.beginPath();
   ctx.moveTo(-mouthW, mouthY);
   ctx.quadraticCurveTo(0, controlY, mouthW, mouthY);
