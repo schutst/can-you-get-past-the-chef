@@ -1,0 +1,101 @@
+/* ==========================================================================
+   CAN YOU GET PAST THE CHEF! — styles
+   Kid-friendly, big text, bright restaurant-y colors.
+   ========================================================================== */
+
+/* ----- Page background and fonts ----- */
+body {
+  margin: 0;
+  padding: 20px;
+  background: #1a0000;                 /* dark red-black, like a pizza oven */
+  color: #fff;
+  font-family: "Comic Sans MS", "Segoe UI", sans-serif;
+  text-align: center;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 32px;
+  margin: 10px 0 20px;
+  color: #ffcc00;                      /* cheesy yellow */
+  text-shadow: 2px 2px 0 #000;
+}
+
+.game-wrapper {
+  max-width: 800px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ----- HUD (the row showing score, lives, star timer) ----- */
+.hud {
+  display: flex;
+  justify-content: space-around;
+  background: #000;
+  border: 3px solid #cc0000;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 15px;
+  font-size: 20px;
+  font-weight: bold;
+}
+.hud > div { padding: 5px 10px; }
+
+#star-timer {
+  color: #ffcc00;
+  animation: pulse 0.5s infinite alternate;
+}
+@keyframes pulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.15); }
+}
+
+/* ----- The game canvas ----- */
+canvas {
+  background: #000;
+  border: 4px solid #cc0000;
+  border-radius: 10px;
+  display: block;
+  margin: 0 auto;
+}
+
+/* ----- Controls area ----- */
+.controls {
+  margin-top: 15px;
+  font-size: 18px;
+}
+
+button {
+  background: #cc0000;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+button:hover { background: #ff3333; }
+
+/* ----- Overlays used for the Win and Lose screens ----- */
+.overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+.message-box {
+  background: #1a0000;
+  border: 4px solid #ffcc00;
+  border-radius: 15px;
+  padding: 30px 50px;
+}
+.message-box h2 { font-size: 40px; margin: 0 0 15px; }
+.message-box p  { font-size: 22px; margin: 10px 0; }
+
+/* Utility: add this class to hide something */
+.hidden { display: none !important; }

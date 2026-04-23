@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Can You Get Past The Chef!</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="game-wrapper">
+
+    <!-- Game title -->
+    <h1>🍕 Can You Get Past The Chef! 👨‍🍳</h1>
+
+    <!-- HUD: score, lives, and the star power timer (hidden unless active) -->
+    <div class="hud">
+      <div>Score: <span id="score">0</span></div>
+      <div>Lives: <span id="lives">❤️❤️❤️</span></div>
+      <div id="star-timer" class="hidden">⭐ Star Power: <span id="star-seconds">5</span>s</div>
+    </div>
+
+    <!-- The actual game is drawn on this canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Controls info + restart button -->
+    <div class="controls">
+      <p>Move with <b>Arrow Keys</b> or <b>WASD</b></p>
+      <button id="restartBtn">🔄 Restart</button>
+    </div>
+
+    <!-- WIN screen: shown when all toppings are collected -->
+    <div id="win-screen" class="overlay hidden">
+      <div class="message-box">
+        <h2>🎉 You Win! 🎉</h2>
+        <p>You got past the chef!</p>
+        <p>Final Score: <span id="final-score-win">0</span></p>
+        <button id="playAgainWinBtn">Play Again</button>
+      </div>
+    </div>
+
+    <!-- LOSE screen: shown when lives run out -->
+    <div id="lose-screen" class="overlay hidden">
+      <div class="message-box">
+        <h2>😢 The Chef Got You!</h2>
+        <p>Try again — you can do it!</p>
+        <p>Final Score: <span id="final-score-lose">0</span></p>
+        <button id="playAgainLoseBtn">Play Again</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Load the game code last, after the HTML exists -->
+  <script src="game.js"></script>
+</body>
+</html>
