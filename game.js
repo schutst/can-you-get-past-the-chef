@@ -1116,12 +1116,13 @@ function drawLevelIntro() {
   ctx.fillStyle   = currentTheme().wallHighlight || "#ffcc00";
   ctx.fillText(  name, cx, cy + 8);
 
-  // Hint line
+  // Hint line — wording depends on the device.
+  const hint = hasTouch ? "tap to skip" : "press any key to skip";
   ctx.font        = "14px 'Comic Sans MS', sans-serif";
   ctx.lineWidth   = 3;
-  ctx.strokeText("press any key to skip", cx, cy + 46);
+  ctx.strokeText(hint, cx, cy + 46);
   ctx.fillStyle   = "#cccccc";
-  ctx.fillText(  "press any key to skip", cx, cy + 46);
+  ctx.fillText(  hint, cx, cy + 46);
 
   ctx.globalAlpha = 1;
 }
